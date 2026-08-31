@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consolidado de Mão de Obra — LM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#0B0E0F;
+    --bg-elev:#12161A;
+    --card:#151A1E;
+    --card-hover:#1A2025;
+    --border:#232A30;
+    --text:#CDD6EA;
+    --text-dim:#8B97B3;
+    --text-faint:#5C6780;
+    --accent:#2EE896;
+    --accent-dim:#1E4A3B;
+    --warning:#F6963C;
+    --danger:#FF5C72;
+    --info:#4FA6FF;
+    --lime:#BEDE36;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:'Space Grotesk', sans-serif;
+    min-height:100vh;
+  }
+  a{color:inherit;text-decoration:none;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#2A323A;border-radius:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  #app{display:flex;flex-direction:column;min-height:100vh;}
+
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 28px;border-bottom:1px solid var(--border);
+    background:var(--bg-elev);
+    flex-wrap:wrap;gap:12px;
+    position:sticky;top:0;z-index:50;
+  }
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand .logo{
+    width:38px;height:38px;border-radius:10px;
+    background:linear-gradient(135deg,var(--accent),#1AA36C);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;color:#08130E;font-size:1.1rem;
+  }
+  .brand h1{font-size:1.05rem;font-weight:600;letter-spacing:.2px;}
+  .brand span{display:block;font-size:.72rem;color:var(--text-dim);font-weight:500;letter-spacing:.5px;}
+
+  .header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+
+  .status-pill{
+    display:flex;align-items:center;gap:6px;
+    font-size:.72rem;color:var(--text-dim);
+    background:var(--card);border:1px solid var(--border);
+    padding:6px 12px;border-radius:999px;
+  }
+  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--warning);}
+  .status-pill.ok .status-dot{background:var(--accent);}
+
+  .btn{
+    border:none;border-radius:8px;padding:10px 16px;font-family:inherit;
+    font-weight:600;font-size:.82rem;cursor:pointer;
+    display:inline-flex;align-items:center;gap:8px;
+    transition:.15s;
+  }
+  .btn-accent{background:var(--accent);color:#08130E;}
+  .btn-accent:hover{background:#3FFCA8;}
+  .btn-ghost{background:transparent;color:var(--text);border:1px solid var(--border);}
+  .btn-ghost:hover{background:var(--card-hover);border-color:#3A4450;}
+  .btn-danger{background:rgba(255,92,114,.12);color:var(--danger);border:1px solid rgba(255,92,114,.3);}
+  .btn-sm{padding:6px 10px;font-size:.74rem;}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+
+  nav.tabs{
+    display:flex;gap:4px;padding:0 28px;border-bottom:1px solid var(--border);
+    background:var(--bg-elev);overflow-x:auto;
+  }
+  nav.tabs button{
+    background:none;border:none;color:var(--text-dim);font-family:inherit;
+    font-weight:600;font-size:.84rem;padding:14px 16px;cursor:pointer;
+    border-bottom:2px solid transparent;white-space:nowrap;
+  }
+  nav.tabs button.active{color:var(--accent);border-bottom-color:var(--accent);}
+  nav.tabs button:hover{color:var(--text);}
+
+  main{flex:1;padding:24px 28px 60px;max-width:1400px;width:100%;margin:0 auto;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .cards-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:22px;}
+  .card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:16px 18px;
+  }
+  .card .label{font-size:.72rem;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+  .card .value{font-size:1.7rem;font-weight:700;margin-top:6px;}
+  .card .value.accent{color:var(--accent);}
+  .card .sub{font-size:.72rem;color:var(--text-faint);margin-top:4px;}
+
+  .section-title{font-size:.95rem;font-weight:700;margin:26px 0 12px;display:flex;align-items:center;justify-content:space-between;}
+  .section-title small{font-weight:500;color:var(--text-dim);font-size:.75rem;}
+
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+
+  .bars{padding:16px 18px;display:flex;flex-direction:column;gap:10px;}
+  .bar-row{display:flex;align-items:center;gap:12px;font-size:.8rem;}
+  .bar-row .name{width:170px;flex-shrink:0;color:var(--text-dim);}
+  .bar-track{flex:1;height:8px;background:#1E252B;border-radius:4px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:4px;background:var(--accent);}
+  .bar-row .count{width:34px;text-align:right;font-weight:600;}
+
+  .toolbar{
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+    padding:14px 18px;border-bottom:1px solid var(--border);
+  }
+  .toolbar input[type=text], .toolbar select{
+    background:var(--bg-elev);border:1px solid var(--border);color:var(--text);
+    padding:9px 12px;border-radius:8px;font-family:inherit;font-size:.8rem;
+  }
+  .toolbar input[type=text]{min-width:200px;flex:1;}
+  .toolbar select{cursor:pointer;}
+  .toolbar .spacer{flex:1;}
+  .toolbar-count{font-size:.75rem;color:var(--text-dim);white-space:nowrap;}
+
+  table{width:100%;border-collapse:collapse;font-size:.8rem;}
+  thead th{
+    text-align:left;padding:10px 14px;color:var(--text-faint);
+    font-size:.68rem;text-transform:uppercase;letter-spacing:.5px;font-weight:600;
+    border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;background:var(--card);
+  }
+  tbody td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  tbody tr:hover{background:var(--card-hover);}
+  tbody tr:last-child td{border-bottom:none;}
+  .table-wrap{overflow-x:auto;}
+  .name-cell{display:flex;align-items:center;gap:10px;}
+  .avatar{
+    width:28px;height:28px;border-radius:50%;background:#232A30;color:var(--text-dim);
+    display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0;
+  }
+  .muted{color:var(--text-faint);}
+  .obra-tag{
+    display:inline-block;padding:3px 9px;border-radius:6px;font-size:.7rem;font-weight:600;
+    background:rgba(79,166,255,.12);color:var(--info);
+  }
+  .badge{
+    display:inline-block;padding:3px 10px;border-radius:999px;font-size:.7rem;font-weight:700;
+    white-space:nowrap;
+  }
+  .badge.st-ativo{background:rgba(46,232,150,.14);color:var(--accent);}
+  .badge.st-ferias{background:rgba(79,166,255,.14);color:var(--info);}
+  .badge.st-afastado{background:rgba(246,150,60,.14);color:var(--warning);}
+  .badge.st-saida{background:rgba(255,92,114,.14);color:var(--danger);}
+  .badge.st-mob{background:rgba(190,222,54,.14);color:var(--lime);}
+  .badge.st-outro{background:#232A30;color:var(--text-dim);}
+  .row-actions{display:flex;gap:6px;}
+  .icon-btn{
+    width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;
+    color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.75rem;
+  }
+  .icon-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .icon-btn.del:hover{border-color:var(--danger);color:var(--danger);}
+
+  .empty-state{padding:50px 20px;text-align:center;color:var(--text-faint);font-size:.85rem;}
+
+  .obra-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;}
+  .obra-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .obra-card-head{padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--border);}
+  .obra-card-head h3{font-size:.92rem;font-weight:700;}
+  .obra-card-head .meta{font-size:.7rem;color:var(--text-faint);margin-top:4px;}
+  .obra-card-head .count-badge{font-size:1.3rem;font-weight:700;color:var(--accent);}
+  .obra-card-body{max-height:260px;overflow-y:auto;}
+  .obra-card-body .worker-row{display:flex;justify-content:space-between;gap:8px;padding:8px 16px;font-size:.76rem;border-bottom:1px solid var(--border);}
+  .obra-card-body .worker-row:last-child{border-bottom:none;}
+  .obra-card-body .worker-row .wname{color:var(--text);}
+  .obra-card-body .worker-row .wfunc{color:var(--text-faint);font-size:.68rem;}
+  .stale{color:var(--warning) !important;}
+
+  .modal-backdrop{
+    position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;
+    z-index:200;padding:20px;
+  }
+  .modal-backdrop.open{display:flex;}
+  .modal{
+    background:var(--bg-elev);border:1px solid var(--border);border-radius:14px;
+    width:100%;max-width:560px;max-height:88vh;overflow-y:auto;
+  }
+  .modal-head{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+  .modal-head h2{font-size:1rem;font-weight:700;}
+  .modal-close{background:none;border:none;color:var(--text-dim);font-size:1.1rem;cursor:pointer;}
+  .modal-body{padding:20px 22px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .form-grid .full{grid-column:1/-1;}
+  .field label{display:block;font-size:.72rem;color:var(--text-dim);margin-bottom:6px;font-weight:600;}
+  .field input, .field select, .field textarea{
+    width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
+    padding:9px 11px;border-radius:8px;font-family:inherit;font-size:.82rem;
+  }
+  .field textarea{resize:vertical;min-height:60px;}
+  .modal-foot{padding:16px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;}
+
+  .import-preview{padding:20px 22px;}
+  .import-preview .obra-line{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:.82rem;}
+  .import-preview .obra-line:last-child{border-bottom:none;}
+  .import-preview .obra-line .n{color:var(--accent);font-weight:700;}
+  .import-warn{background:rgba(246,150,60,.1);border:1px solid rgba(246,150,60,.3);color:var(--warning);
+    padding:10px 14px;border-radius:8px;font-size:.76rem;margin-bottom:14px;}
+
+  .toast-wrap{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:300;}
+  .toast{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);
+    padding:12px 16px;border-radius:8px;font-size:.8rem;min-width:240px;box-shadow:0 6px 20px rgba(0,0,0,.4);}
+  .toast.error{border-left-color:var(--danger);}
+
+  .log-item{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .log-item:last-child{border-bottom:none;}
+  .log-item .lwhen{font-size:.78rem;color:var(--text-dim);min-width:150px;}
+  .log-item .lfile{font-weight:600;font-size:.82rem;}
+  .log-item .lobras{font-size:.72rem;color:var(--text-faint);margin-top:3px;}
+
+  footer{padding:18px 28px;text-align:center;color:var(--text-faint);font-size:.72rem;border-top:1px solid var(--border);}
+
+  @media (max-width:640px){
+    main{padding:16px;}
+    .form-grid{grid-template-columns:1fr;}
+    header{padding:12px 16px;}
+    nav.tabs{padding:0 16px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="access-gate" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:500;align-items:center;justify-content:center;padding:20px;">
+  <form id="access-gate-form" style="width:100%;max-width:320px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px 26px;text-align:center;">
+    <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#1AA36C);display:flex;align-items:center;justify-content:center;font-weight:700;color:#08130E;font-size:1.2rem;margin:0 auto 16px;">MO</div>
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:4px;">Consolidado de Mão de Obra</h2>
+    <p style="font-size:.78rem;color:var(--text-dim);margin-bottom:18px;">Acesso restrito — digite a senha para continuar.</p>
+    <input type="password" id="access-gate-input" placeholder="Senha" autocomplete="off"
+      style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-family:inherit;font-size:.85rem;text-align:center;margin-bottom:10px;">
+    <div id="access-gate-error" style="display:none;color:var(--danger);font-size:.74rem;margin-bottom:10px;">Senha incorreta.</div>
+    <button type="submit" class="btn btn-accent" style="width:100%;justify-content:center;">Entrar</button>
+  </form>
+</div>
+
+<div id="app" style="display:none;">
+
+  <header>
+    <div class="brand">
+      <div class="logo">MO</div>
+      <div>
+        <h1>Consolidado de Mão de Obra</h1>
+        <span>LM CONSTRUTORA — EFETIVO POR OBRA</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="status-pill" id="conn-status">
+        <span class="status-dot"></span>
+        <span id="conn-text">Modo local (este navegador)</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="btn-export">Exportar Excel</button>
+      <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none;">
+      <button class="btn btn-accent" id="btn-import">Importar planilha semanal</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button data-view="dashboard" class="active">Dashboard</button>
+    <button data-view="consolidado">Consolidado</button>
+    <button data-view="porobra">Por Obra</button>
+    <button data-view="importacoes">Importações</button>
+  </nav>
+
+  <main>
+
+    <!-- DASHBOARD -->
+    <section class="view active" id="view-dashboard">
+      <div class="cards-row" id="dash-cards"></div>
+
+      <div class="section-title">Colaboradores por status</div>
+      <div class="panel">
+        <div class="bars" id="dash-status-bars"></div>
+      </div>
+
+      <div class="section-title">Resumo por obra <small id="dash-obra-count"></small></div>
+      <div class="panel table-wrap">
+        <table>
+          <thead><tr>
+            <th>Obra</th><th>Colaboradores</th><th>Ativos</th><th>Última atualização</th>
+          </tr></thead>
+          <tbody id="dash-obra-table"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- CONSOLIDADO -->
+    <section class="view" id="view-consolidado">
+      <div class="panel">
+        <div class="toolbar">
+          <input type="text" id="f-busca" placeholder="Buscar por nome...">
+          <select id="f-obra"><option value="">Todas as obras</option></select>
+          <select id="f-status"><option value="">Todos os status</option></select>
+          <select id="f-funcao"><option value="">Todas as funções</option></select>
+          <div class="spacer"></div>
+          <span class="toolbar-count" id="cons-count"></span>
+          <button class="btn btn-accent btn-sm" id="btn-add-worker">+ Colaborador</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Nome</th><th>Obra</th><th>Local</th><th>Função</th><th>Nível</th>
+              <th>Admissão</th><th>Fornecedor</th><th>Frente</th><th>Status</th><th>Observação</th><th></th>
+            </tr></thead>
+            <tbody id="cons-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- POR OBRA -->
+    <section class="view" id="view-porobra">
+      <div class="obra-grid" id="porobra-grid"></div>
+    </section>
+
+    <!-- IMPORTAÇÕES -->
+    <section class="view" id="view-importacoes">
+      <div class="panel" id="import-log-panel">
+        <div class="empty-state">Nenhuma importação registrada ainda.</div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>Consolidado de Mão de Obra · dados salvos automaticamente · <span id="footer-mode">modo local</span></footer>
+</div>
+
+<!-- MODAL: IMPORT PREVIEW -->
+<div class="modal-backdrop" id="modal-import">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Confirmar importação</h2>
+      <button class="modal-close" data-close>&times;</button>
+    </div>
+    <div class="import-preview" id="import-preview-body"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close>Cancelar</button>
+      <button class="btn btn-accent" id="btn-confirm-import">Confirmar importação</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: WORKER FORM -->
+<div class="modal-backdrop" id="modal-worker">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="worker-modal-title">Adicionar colaborador</h2>
+      <button class="modal-close" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field full">
+          <label>Nome *</label>
+          <input type="text" id="w-nome">
+        </div>
+        <div class="field">
+          <label>Obra *</label>
+          <input type="text" id="w-obra" list="obra-list">
+          <datalist id="obra-list"></datalist>
+        </div>
+        <div class="field">
+          <label>Local / Frente</label>
+          <input type="text" id="w-local">
+        </div>
+        <div class="field">
+          <label>Função</label>
+          <input type="text" id="w-funcao">
+        </div>
+        <div class="field">
+          <label>Nível</label>
+          <input type="text" id="w-nivel">
+        </div>
+        <div class="field">
+          <label>Código</label>
+          <input type="text" id="w-cod">
+        </div>
+        <div class="field">
+          <label>Admissão</label>
+          <input type="text" id="w-admissao" placeholder="dd/mm/aaaa">
+        </div>
+        <div class="field">
+          <label>Tipo / Fornecedor</label>
+          <input type="text" id="w-fornecedor">
+        </div>
+        <div class="field">
+          <label>Obra (cód. SIENG)</label>
+          <input type="text" id="w-sieng">
+        </div>
+        <div class="field">
+          <label>Frente de Serviço</label>
+          <input type="text" id="w-frente">
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select id="w-status">
+            <option>ATIVO</option>
+            <option>FÉRIAS</option>
+            <option>AFASTADO</option>
+            <option>ATESTADO</option>
+            <option>DIÁRIA</option>
+            <option>MOBILIZADO</option>
+            <option>ABANDONO DE EMPREGO</option>
+            <option>DEMITIDO</option>
+            <option>OUTRO</option>
+          </select>
+        </div>
+        <div class="field full">
+          <label>Observação</label>
+          <textarea id="w-obs"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close>Cancelar</button>
+      <button class="btn btn-accent" id="btn-save-worker">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script type="module">
+/* =========================================================================
+   CONFIGURAÇÃO DO FIREBASE
+   -------------------------------------------------------------------------
+   Crie um projeto gratuito em https://console.firebase.google.com
+   (Adicionar projeto → ative "Firestore Database" em modo produção)
+   e cole aqui as credenciais em "Configurações do projeto > Geral > SDK".
+   Enquanto isso ficar com o valor de exemplo abaixo, o site funciona
+   normalmente salvando os dados apenas neste navegador (modo local).
+   ========================================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyDcNsjr0GdYPj70IF74G0hhhKc8qQ_jpkc",
+  authDomain: "lm-construtora-13c8f.firebaseapp.com",
+  projectId: "lm-construtora-13c8f",
+  storageBucket: "lm-construtora-13c8f.firebasestorage.app",
+  messagingSenderId: "384896887716",
+  appId: "1:384896887716:web:cfa633578043bda6a2af31"
+};
+
+/* -------------------------------------------------------------------------
+   SENHA DO SITE
+   -------------------------------------------------------------------------
+   Uma única senha protege tanto a abertura do site quanto as ações de
+   Importar/Exportar. Troque o valor abaixo pela senha que quiser usar.
+   Atenção: como este site não tem servidor por trás, isso é uma trava para
+   uso casual (evita que quem não deveria acessar entre só com o link) — não
+   é uma proteção real contra alguém que abra o código-fonte da página.
+   ------------------------------------------------------------------------- */
+const SITE_PASSWORD = "lm2026";
+const SITE_UNLOCK_KEY = "moSiteUnlocked"; // localStorage: fica destravado nesse aparelho
+const ACTION_UNLOCK_KEY = "moActionUnlocked"; // sessionStorage: confirmação extra por sessão
+
+function requireUnlock() {
+  if (sessionStorage.getItem(ACTION_UNLOCK_KEY) === "true") return true;
+  const attempt = prompt("Digite a senha para importar/exportar dados:");
+  if (attempt === null) return false;
+  if (attempt === SITE_PASSWORD) {
+    sessionStorage.setItem(ACTION_UNLOCK_KEY, "true");
+    return true;
+  }
+  toast("Senha incorreta.", true);
+  return false;
+}
+
+function checkSiteAccess() {
+  const gate = document.getElementById("access-gate");
+  const app = document.getElementById("app");
+  if (localStorage.getItem(SITE_UNLOCK_KEY) === "true") {
+    gate.style.display = "none";
+    app.style.display = "";
+    return true;
+  }
+  gate.style.display = "flex";
+  app.style.display = "none";
+  return false;
+}
+
+document.getElementById("access-gate-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const input = document.getElementById("access-gate-input");
+  if (input.value === SITE_PASSWORD) {
+    localStorage.setItem(SITE_UNLOCK_KEY, "true");
+    document.getElementById("access-gate-error").style.display = "none";
+    checkSiteAccess();
+  } else {
+    document.getElementById("access-gate-error").style.display = "block";
+    input.value = "";
+    input.focus();
+  }
+});
+
+const STATUS_LABELS = ["ATIVO","FÉRIAS","AFASTADO","ATESTADO","DIÁRIA","MOBILIZADO","ABANDONO DE EMPREGO","DEMITIDO","OUTRO"];
+const CLASSIF_LABELS = ["FOLHA E EFETIVO","FOLHA DIFERENTE","APENAS FOLHA","APENAS EFETIVO","PJ / TERCERIZADO"];
+
+/* -------------------------------------------------------------------------
+   CAMADA DE ARMAZENAMENTO (Firestore se configurado, senão localStorage)
+   ------------------------------------------------------------------------- */
+let useFirebase = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("COLE_AQUI");
+let db = null, fs = null;
+
+if (useFirebase) {
+  try {
+    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+    fs = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+    const app = initializeApp(firebaseConfig);
+    db = fs.getFirestore(app);
+  } catch (e) {
+    console.error("Falha ao iniciar Firebase, caindo para modo local:", e);
+    useFirebase = false;
+  }
+}
+
+const LS_KEY = "consolidadoMaoDeObra";
+function lsRead() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || { colaboradores: [], obras: {}, importacoes: [] }; }
+  catch { return { colaboradores: [], obras: {}, importacoes: [] }; }
+}
+function lsWrite(data) { localStorage.setItem(LS_KEY, JSON.stringify(data)); }
+
+const Store = {
+  async loadAll() {
+    if (useFirebase) {
+      // Sequencial (em vez de Promise.all) para não abrir várias conexões
+      // simultâneas na primeira leitura — mais robusto em redes com proxy/firewall.
+      const colSnap = await fs.getDocs(fs.collection(db, "colaboradores"));
+      const obrasSnap = await fs.getDocs(fs.collection(db, "obras"));
+      const logSnap = await fs.getDocs(fs.query(fs.collection(db, "importacoes"), fs.orderBy("timestamp", "desc")));
+      const colaboradores = colSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const obras = {};
+      obrasSnap.docs.forEach(d => obras[d.id] = d.data());
+      const importacoes = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return { colaboradores, obras, importacoes };
+    }
+    return lsRead();
+  },
+
+  async replaceObra(obraName, records, meta) {
+    const slug = slugify(obraName);
+    if (useFirebase) {
+      const existing = await fs.getDocs(fs.query(fs.collection(db, "colaboradores"), fs.where("obra", "==", obraName)));
+      const batchOps = [];
+      let batch = fs.writeBatch(db);
+      let opCount = 0;
+      for (const d of existing.docs) {
+        batch.delete(d.ref);
+        opCount++;
+        if (opCount >= 450) { batchOps.push(batch); batch = fs.writeBatch(db); opCount = 0; }
+      }
+      for (const rec of records) {
+        batch.set(fs.doc(fs.collection(db, "colaboradores")), rec);
+        opCount++;
+        if (opCount >= 450) { batchOps.push(batch); batch = fs.writeBatch(db); opCount = 0; }
+      }
+      batchOps.push(batch);
+      for (const b of batchOps) await b.commit();
+      await fs.setDoc(fs.doc(db, "obras", slug), { nome: obraName, ...meta, lastUpdated: Date.now() }, { merge: true });
+    } else {
+      const data = lsRead();
+      data.colaboradores = data.colaboradores.filter(c => c.obra !== obraName);
+      records.forEach(r => data.colaboradores.push({ id: cryptoId(), ...r }));
+      data.obras[slug] = { nome: obraName, ...meta, lastUpdated: Date.now() };
+      lsWrite(data);
+    }
+  },
+
+  async addImportLog(entry) {
+    if (useFirebase) {
+      await fs.addDoc(fs.collection(db, "importacoes"), { ...entry, timestamp: Date.now() });
+    } else {
+      const data = lsRead();
+      data.importacoes.unshift({ id: cryptoId(), ...entry, timestamp: Date.now() });
+      lsWrite(data);
+    }
+  },
+
+  async saveWorker(rec) {
+    if (useFirebase) {
+      if (rec.id) {
+        const { id, ...rest } = rec;
+        await fs.setDoc(fs.doc(db, "colaboradores", id), rest, { merge: true });
+      } else {
+        await fs.addDoc(fs.collection(db, "colaboradores"), rec);
+      }
+    } else {
+      const data = lsRead();
+      if (rec.id) {
+        const idx = data.colaboradores.findIndex(c => c.id === rec.id);
+        if (idx >= 0) data.colaboradores[idx] = { ...data.colaboradores[idx], ...rec };
+      } else {
+        data.colaboradores.push({ id: cryptoId(), ...rec });
+      }
+      if (rec.obra) {
+        const slug = slugify(rec.obra);
+        if (!data.obras[slug]) data.obras[slug] = { nome: rec.obra, lastUpdated: Date.now() };
+      }
+      lsWrite(data);
+    }
+  },
+
+  async deleteWorker(id) {
+    if (useFirebase) {
+      await fs.deleteDoc(fs.doc(db, "colaboradores", id));
+    } else {
+      const data = lsRead();
+      data.colaboradores = data.colaboradores.filter(c => c.id !== id);
+      lsWrite(data);
+    }
+  }
+};
+
+function cryptoId() { return "id-" + Math.random().toString(36).slice(2) + Date.now().toString(36); }
+function slugify(s) { return (s || "sem-obra").toString().trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "SEM-OBRA"; }
+
+/* -------------------------------------------------------------------------
+   ESTADO DA APLICAÇÃO
+   ------------------------------------------------------------------------- */
+let STATE = { colaboradores: [], obras: {}, importacoes: [] };
+
+async function reload() {
+  STATE = await Store.loadAll();
+  renderAll();
+}
+
+function renderAll() {
+  renderFilters();
+  renderDashboard();
+  renderConsolidado();
+  renderPorObra();
+  renderImportacoes();
+  updateConnStatus();
+}
+
+function updateConnStatus() {
+  const pill = document.getElementById("conn-status");
+  const txt = document.getElementById("conn-text");
+  const footerMode = document.getElementById("footer-mode");
+  if (useFirebase) {
+    pill.classList.add("ok");
+    txt.textContent = "Sincronizado (Firebase)";
+    footerMode.textContent = "sincronizado com o Firebase";
+  } else {
+    pill.classList.remove("ok");
+    txt.textContent = "Modo local (este navegador)";
+    footerMode.textContent = "modo local — configure o Firebase para sincronizar entre computadores";
+  }
+}
+
+/* -------------------------------------------------------------------------
+   STATUS HELPERS
+   ------------------------------------------------------------------------- */
+function statusClass(status) {
+  const s = (status || "").toUpperCase();
+  if (s.includes("ATIVO")) return "st-ativo";
+  if (s.includes("FÉRIAS") || s.includes("FERIAS")) return "st-ferias";
+  if (s.includes("AFASTAD") || s.includes("ATESTADO")) return "st-afastado";
+  if (s.includes("ABANDONO") || s.includes("DEMITID") || s.includes("DEMISSÃO") || s.includes("DEMISSAO")) return "st-saida";
+  if (s.includes("MOBILIZAD")) return "st-mob";
+  return "st-outro";
+}
+function initials(name) {
+  const parts = (name || "?").trim().split(/\s+/);
+  return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase();
+}
+function timeAgo(ts) {
+  if (!ts) return "—";
+  const diff = Date.now() - ts;
+  const days = Math.floor(diff / 86400000);
+  if (days <= 0) return "hoje";
+  if (days === 1) return "há 1 dia";
+  if (days < 30) return `há ${days} dias`;
+  return new Date(ts).toLocaleDateString("pt-BR");
+}
+function isStale(ts) { return !ts || (Date.now() - ts) > 7 * 86400000; }
+
+/* -------------------------------------------------------------------------
+   DASHBOARD
+   ------------------------------------------------------------------------- */
+function renderDashboard() {
+  const c = STATE.colaboradores;
+  const obrasList = Object.values(STATE.obras);
+  const total = c.length;
+  const ativos = c.filter(w => statusClass(w.status) === "st-ativo").length;
+  const desatualizadas = obrasList.filter(o => isStale(o.lastUpdated)).length;
+
+  document.getElementById("dash-cards").innerHTML = `
+    <div class="card"><div class="label">Total de colaboradores</div><div class="value accent">${total}</div><div class="sub">em ${obrasList.length} obra(s)</div></div>
+    <div class="card"><div class="label">Ativos</div><div class="value">${ativos}</div><div class="sub">${total ? Math.round(ativos/total*100) : 0}% do total</div></div>
+    <div class="card"><div class="label">Obras desatualizadas</div><div class="value" style="color:${desatualizadas ? 'var(--warning)' : 'var(--text)'}">${desatualizadas}</div><div class="sub">sem atualização há mais de 7 dias</div></div>
+    <div class="card"><div class="label">Última importação</div><div class="value" style="font-size:1rem;font-weight:600;">${STATE.importacoes[0] ? timeAgo(STATE.importacoes[0].timestamp) : "nenhuma"}</div><div class="sub">${STATE.importacoes[0]?.fileName || ""}</div></div>
+  `;
+
+  const statusCounts = {};
+  c.forEach(w => { const s = w.status || "SEM STATUS"; statusCounts[s] = (statusCounts[s] || 0) + 1; });
+  const maxCount = Math.max(1, ...Object.values(statusCounts));
+  const bars = Object.entries(statusCounts).sort((a, b) => b[1] - a[1]).map(([status, n]) => `
+    <div class="bar-row">
+      <div class="name">${status}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${n/maxCount*100}%"></div></div>
+      <div class="count">${n}</div>
+    </div>
+  `).join("");
+  document.getElementById("dash-status-bars").innerHTML = bars || `<div class="empty-state">Nenhum colaborador cadastrado ainda. Importe a planilha semanal para começar.</div>`;
+
+  document.getElementById("dash-obra-count").textContent = `${obrasList.length} obra(s)`;
+  const rows = obrasList.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0)).map(o => {
+    const workers = c.filter(w => w.obra === o.nome);
+    const ativosObra = workers.filter(w => statusClass(w.status) === "st-ativo").length;
+    return `<tr>
+      <td><span class="obra-tag">${o.nome}</span></td>
+      <td>${workers.length}</td>
+      <td>${ativosObra}</td>
+      <td class="${isStale(o.lastUpdated) ? "stale" : "muted"}">${timeAgo(o.lastUpdated)}</td>
+    </tr>`;
+  }).join("");
+  document.getElementById("dash-obra-table").innerHTML = rows || `<tr><td colspan="4" class="empty-state">Sem obras cadastradas ainda.</td></tr>`;
+}
+
+/* -------------------------------------------------------------------------
+   FILTROS (selects)
+   ------------------------------------------------------------------------- */
+function renderFilters() {
+  const obraSel = document.getElementById("f-obra");
+  const statusSel = document.getElementById("f-status");
+  const funcaoSel = document.getElementById("f-funcao");
+  const obraList = document.getElementById("obra-list");
+
+  const obras = [...new Set(STATE.colaboradores.map(w => w.obra).filter(Boolean))].sort();
+  const statuses = [...new Set(STATE.colaboradores.map(w => w.status).filter(Boolean))].sort();
+  const funcoes = [...new Set(STATE.colaboradores.map(w => w.funcao).filter(Boolean))].sort();
+
+  const keep = (sel, values, allLabel) => {
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">${allLabel}</option>` + values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+    sel.value = values.includes(cur) ? cur : "";
+  };
+  keep(obraSel, obras, "Todas as obras");
+  keep(statusSel, statuses, "Todos os status");
+  keep(funcaoSel, funcoes, "Todas as funções");
+  obraList.innerHTML = obras.map(o => `<option value="${escapeHtml(o)}">`).join("");
+}
+
+function escapeHtml(s) { return (s ?? "").toString().replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+
+/* -------------------------------------------------------------------------
+   CONSOLIDADO (tabela completa)
+   ------------------------------------------------------------------------- */
+function getFilteredWorkers() {
+  const busca = document.getElementById("f-busca").value.trim().toLowerCase();
+  const obra = document.getElementById("f-obra").value;
+  const status = document.getElementById("f-status").value;
+  const funcao = document.getElementById("f-funcao").value;
+  return STATE.colaboradores.filter(w => {
+    if (busca && !(w.nome || "").toLowerCase().includes(busca)) return false;
+    if (obra && w.obra !== obra) return false;
+    if (status && w.status !== status) return false;
+    if (funcao && w.funcao !== funcao) return false;
+    return true;
+  }).sort((a, b) => (a.obra || "").localeCompare(b.obra || "") || (a.nome || "").localeCompare(b.nome || ""));
+}
+
+function renderConsolidado() {
+  const list = getFilteredWorkers();
+  document.getElementById("cons-count").textContent = `${list.length} de ${STATE.colaboradores.length} colaborador(es)`;
+  const rows = list.map(w => `
+    <tr>
+      <td><div class="name-cell"><div class="avatar">${initials(w.nome)}</div>${escapeHtml(w.nome)}</div></td>
+      <td><span class="obra-tag">${escapeHtml(w.obra || "—")}</span></td>
+      <td class="muted">${escapeHtml(w.local || "—")}</td>
+      <td>${escapeHtml(w.funcao || "—")}</td>
+      <td class="muted">${escapeHtml(w.nivel || "—")}</td>
+      <td class="muted">${escapeHtml(w.admissao || "—")}</td>
+      <td class="muted">${escapeHtml(w.fornecedor || "—")}</td>
+      <td class="muted">${escapeHtml(w.frente || "—")}</td>
+      <td><span class="badge ${statusClass(w.status)}">${escapeHtml(w.status || "—")}</span></td>
+      <td class="muted" style="max-width:180px;white-space:normal;">${escapeHtml(w.obs || "")}</td>
+      <td>
+        <div class="row-actions">
+          <button class="icon-btn" title="Editar" data-edit="${w.id}">✎</button>
+          <button class="icon-btn del" title="Excluir" data-del="${w.id}">✕</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+  document.getElementById("cons-table").innerHTML = rows || `<tr><td colspan="11" class="empty-state">Nenhum colaborador encontrado. Importe a planilha semanal ou adicione manualmente.</td></tr>`;
+}
+
+/* -------------------------------------------------------------------------
+   POR OBRA
+   ------------------------------------------------------------------------- */
+function renderPorObra() {
+  const obrasList = Object.values(STATE.obras).sort((a, b) => a.nome.localeCompare(b.nome));
+  if (!obrasList.length) {
+    document.getElementById("porobra-grid").innerHTML = `<div class="empty-state">Nenhuma obra cadastrada ainda.</div>`;
+    return;
+  }
+  document.getElementById("porobra-grid").innerHTML = obrasList.map(o => {
+    const workers = STATE.colaboradores.filter(w => w.obra === o.nome).sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+    return `
+      <div class="obra-card">
+        <div class="obra-card-head">
+          <div>
+            <h3>${escapeHtml(o.nome)}</h3>
+            <div class="meta ${isStale(o.lastUpdated) ? "stale" : ""}">Atualizado ${timeAgo(o.lastUpdated)}</div>
+          </div>
+          <div class="count-badge">${workers.length}</div>
+        </div>
+        <div class="obra-card-body">
+          ${workers.map(w => `
+            <div class="worker-row">
+              <div><div class="wname">${escapeHtml(w.nome)}</div><div class="wfunc">${escapeHtml(w.funcao || "")}</div></div>
+              <span class="badge ${statusClass(w.status)}">${escapeHtml(w.status || "—")}</span>
+            </div>
+          `).join("") || `<div class="worker-row"><span class="muted">Sem colaboradores</span></div>`}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+/* -------------------------------------------------------------------------
+   IMPORTAÇÕES (log)
+   ------------------------------------------------------------------------- */
+function renderImportacoes() {
+  const panel = document.getElementById("import-log-panel");
+  if (!STATE.importacoes.length) {
+    panel.innerHTML = `<div class="empty-state">Nenhuma importação registrada ainda.</div>`;
+    return;
+  }
+  panel.innerHTML = STATE.importacoes.map(log => `
+    <div class="log-item">
+      <div class="lwhen">${new Date(log.timestamp).toLocaleString("pt-BR")}</div>
+      <div style="flex:1;min-width:200px;">
+        <div class="lfile">${escapeHtml(log.fileName)}</div>
+        <div class="lobras">${(log.obras || []).join(", ")} · ${log.totalRegistros} registro(s)</div>
+      </div>
+    </div>
+  `).join("");
+}
+
+/* -------------------------------------------------------------------------
+   IMPORTAÇÃO DE PLANILHA (.xlsx / .xls / .csv)
+   ------------------------------------------------------------------------- */
+const HEADER_MAP = [
+  { key: "cod",        match: h => h === "COD." || (h.includes("COD") && !h.includes("SIENG")) },
+  { key: "local",      match: h => h === "OBRA" },
+  { key: "funcao",     match: h => h.includes("FUNÇÃO") || h.includes("FUNCAO") },
+  { key: "nivel",      match: h => h.includes("NÍVEL") || h.includes("NIVEL") },
+  { key: "nome",       match: h => h === "NOME" || h.includes("NOME") },
+  { key: "admissao",   match: h => h.includes("ADMISS") },
+  { key: "fornecedor", match: h => h.includes("FORNECEDOR") || h.includes("TIPO") },
+  { key: "sieng",      match: h => h.includes("SIENG") },
+  { key: "frente",     match: h => h.includes("FRENTE") },
+  { key: "status",     match: h => h.includes("STATUS") },
+  { key: "obs",        match: h => h.includes("OBSERVA") },
+];
+
+let pendingImport = null;
+
+function findHeaderRow(rows) {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const norm = row.map(c => (c ?? "").toString().trim().toUpperCase());
+    const hasCod = norm.some(c => c === "COD." || c.startsWith("COD"));
+    const hasNome = norm.some(c => c === "NOME" || c.includes("NOME"));
+    const hasFuncao = norm.some(c => c.includes("FUNÇÃO") || c.includes("FUNCAO"));
+    if (hasCod && hasNome && hasFuncao) return i;
+  }
+  return -1;
+}
+
+function buildColumnIndex(headerRow) {
+  const norm = headerRow.map(c => (c ?? "").toString().trim().toUpperCase());
+  const idx = {};
+  for (const { key, match } of HEADER_MAP) {
+    let found = norm.findIndex(h => h === key.toUpperCase());
+    if (found === -1) found = norm.findIndex(match);
+    if (found !== -1) idx[key] = found;
+  }
+  return idx;
+}
+
+function formatCell(v) {
+  if (v === undefined || v === null) return "";
+  return v.toString().trim();
+}
+
+function excelSerialToDateStr(v) {
+  if (typeof v !== "number" || !isFinite(v)) return formatCell(v);
+  // Usa o conversor de data do próprio SheetJS (respeita o bug do ano bissexto 1900 do Excel)
+  const d = XLSX.SSF.parse_date_code(v);
+  if (!d || !d.y) return formatCell(v);
+  const pad = n => n.toString().padStart(2, "0");
+  return `${pad(d.d)}/${pad(d.m)}/${d.y}`;
+}
+
+function parseSheetRows(rows) {
+  const headerIdx = findHeaderRow(rows);
+  if (headerIdx === -1) return null;
+  const colIdx = buildColumnIndex(rows[headerIdx]);
+  if (colIdx.nome === undefined || colIdx.funcao === undefined) return null;
+
+  const byObra = {};
+  let currentObra = "";
+  let anySection = false;
+
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const get = k => (colIdx[k] !== undefined ? formatCell(row[colIdx[k]]) : "");
+    const nome = get("nome");
+    const funcao = get("funcao");
+    const cod = get("cod");
+    const local = get("local");
+
+    if (!nome && !funcao && row.every(c => !formatCell(c))) continue; // linha em branco
+
+    if (funcao && funcao.toUpperCase() === "TOTAL DE COLABORADORES") continue; // linha de total, ignorar
+
+    if (funcao && !nome && !cod) {
+      // cabeçalho de seção = nome da obra
+      currentObra = funcao.replace(/\s*-\s*ÚLTIMA ATUALIZAÇÃO.*$/i, "").replace(/\s*-\s*ULTIMA ATUALIZAÇÃO.*$/i, "").trim();
+      anySection = true;
+      continue;
+    }
+
+    if (!nome) continue;
+
+    let classificacao = "";
+    for (const cell of row) {
+      const val = formatCell(cell).toUpperCase();
+      if (CLASSIF_LABELS.includes(val)) { classificacao = val; break; }
+    }
+
+    const obra = currentObra || local || "SEM OBRA";
+    if (!byObra[obra]) byObra[obra] = [];
+    const admissaoRaw = colIdx.admissao !== undefined ? row[colIdx.admissao] : "";
+    byObra[obra].push({
+      obra, cod, local, funcao, nivel: get("nivel"), nome,
+      admissao: excelSerialToDateStr(admissaoRaw), fornecedor: get("fornecedor"),
+      sieng: get("sieng"), frente: get("frente"), status: get("status") || "ATIVO",
+      obs: get("obs"), classificacao
+    });
+  }
+
+  if (!anySection) {
+    // fallback: sem seções por obra -> agrupar pela coluna "Obra" (D) de cada linha
+    const flat = {};
+    Object.values(byObra).flat().forEach(r => {
+      const obra = r.local || r.obra || "SEM OBRA";
+      if (!flat[obra]) flat[obra] = [];
+      flat[obra].push({ ...r, obra });
+    });
+    return flat;
+  }
+
+  return byObra;
+}
+
+document.getElementById("btn-import").addEventListener("click", () => {
+  if (!requireUnlock()) return;
+  document.getElementById("file-input").click();
+});
+
+document.getElementById("file-input").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+
+    let best = null;
+    for (const sheetName of wb.SheetNames) {
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true });
+      const parsed = parseSheetRows(rows);
+      if (parsed && Object.keys(parsed).length) {
+        const total = Object.values(parsed).flat().length;
+        if (!best || total > best.total) best = { sheetName, parsed, total };
+      }
+    }
+
+    if (!best) {
+      toast("Não foi possível identificar a tabela de mão de obra nesse arquivo. Verifique se a planilha segue o padrão (colunas COD., OBRA, FUNÇÃO, NOME...).", true);
+      return;
+    }
+
+    pendingImport = { fileName: file.name, sheetName: best.sheetName, byObra: best.parsed };
+    openImportPreview();
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao ler o arquivo: " + err.message, true);
+  }
+});
+
+function openImportPreview() {
+  const body = document.getElementById("import-preview-body");
+  const entries = Object.entries(pendingImport.byObra);
+  const total = entries.reduce((s, [, list]) => s + list.length, 0);
+  body.innerHTML = `
+    <div class="import-warn">Isso vai substituir os dados atuais das obras listadas abaixo pelos dados dessa planilha. Obras não listadas aqui permanecem como estão.</div>
+    ${entries.map(([obra, list]) => `<div class="obra-line"><span>${escapeHtml(obra)}</span><span class="n">${list.length} colaborador(es)</span></div>`).join("")}
+    <div class="obra-line" style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px;"><strong>Total</strong><strong class="n">${total}</strong></div>
+  `;
+  document.getElementById("modal-import").classList.add("open");
+}
+
+document.getElementById("btn-confirm-import").addEventListener("click", async () => {
+  if (!pendingImport) return;
+  const btn = document.getElementById("btn-confirm-import");
+  btn.disabled = true; btn.textContent = "Importando...";
+  try {
+    const entries = Object.entries(pendingImport.byObra);
+    for (const [obra, list] of entries) {
+      await Store.replaceObra(obra, list, {});
+    }
+    await Store.addImportLog({
+      fileName: pendingImport.fileName,
+      obras: entries.map(([o]) => o),
+      totalRegistros: entries.reduce((s, [, l]) => s + l.length, 0)
+    });
+    closeModals();
+    toast(`Importação concluída: ${entries.length} obra(s) atualizadas.`);
+    await reload();
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao salvar importação: " + err.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Confirmar importação";
+    pendingImport = null;
+  }
+});
+
+/* -------------------------------------------------------------------------
+   EXPORTAR EXCEL
+   ------------------------------------------------------------------------- */
+document.getElementById("btn-export").addEventListener("click", () => {
+  if (!requireUnlock()) return;
+  const rows = [["COD.","OBRA","FUNÇÃO","NÍVEL","NOME","ADMISSÃO","TIPO / FORNECEDOR","OBRA (COD. SIENG)","FRENTE SERVIÇO","STATUS","OBSERVAÇÃO"]];
+  const byObra = {};
+  STATE.colaboradores.forEach(w => { (byObra[w.obra || "SEM OBRA"] ||= []).push(w); });
+  Object.entries(byObra).sort(([a],[b]) => a.localeCompare(b)).forEach(([obra, list]) => {
+    rows.push([obra]);
+    list.forEach(w => rows.push([w.cod||"", w.local||"", w.funcao||"", w.nivel||"", w.nome||"", w.admissao||"", w.fornecedor||"", w.sieng||"", w.frente||"", w.status||"", w.obs||""]));
+    rows.push(["TOTAL DE COLABORADORES","","","","", list.length]);
+    rows.push([]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Consolidado");
+  XLSX.writeFile(wb, `consolidado-mao-de-obra-${new Date().toISOString().slice(0,10)}.xlsx`);
+});
+
+/* -------------------------------------------------------------------------
+   MODAL: ADICIONAR / EDITAR COLABORADOR
+   ------------------------------------------------------------------------- */
+function openWorkerModal(worker) {
+  document.getElementById("worker-modal-title").textContent = worker ? "Editar colaborador" : "Adicionar colaborador";
+  const f = id => document.getElementById(id);
+  f("w-nome").value = worker?.nome || "";
+  f("w-obra").value = worker?.obra || "";
+  f("w-local").value = worker?.local || "";
+  f("w-funcao").value = worker?.funcao || "";
+  f("w-nivel").value = worker?.nivel || "";
+  f("w-cod").value = worker?.cod || "";
+  f("w-admissao").value = worker?.admissao || "";
+  f("w-fornecedor").value = worker?.fornecedor || "";
+  f("w-sieng").value = worker?.sieng || "";
+  f("w-frente").value = worker?.frente || "";
+  f("w-status").value = STATUS_LABELS.includes(worker?.status) ? worker.status : "ATIVO";
+  f("w-obs").value = worker?.obs || "";
+  document.getElementById("modal-worker").dataset.editId = worker?.id || "";
+  document.getElementById("modal-worker").classList.add("open");
+}
+
+document.getElementById("btn-add-worker").addEventListener("click", () => openWorkerModal(null));
+
+document.getElementById("btn-save-worker").addEventListener("click", async () => {
+  const f = id => document.getElementById(id).value.trim();
+  const nome = f("w-nome"), obra = f("w-obra");
+  if (!nome || !obra) { toast("Preencha ao menos Nome e Obra.", true); return; }
+  const editId = document.getElementById("modal-worker").dataset.editId;
+  const rec = {
+    id: editId || undefined,
+    nome, obra, local: f("w-local"), funcao: f("w-funcao"), nivel: f("w-nivel"),
+    cod: f("w-cod"), admissao: f("w-admissao"), fornecedor: f("w-fornecedor"),
+    sieng: f("w-sieng"), frente: f("w-frente"), status: f("w-status"), obs: f("w-obs")
+  };
+  await Store.saveWorker(rec);
+  closeModals();
+  toast(editId ? "Colaborador atualizado." : "Colaborador adicionado.");
+  await reload();
+});
+
+document.getElementById("cons-table").addEventListener("click", async (e) => {
+  const editId = e.target.dataset.edit;
+  const delId = e.target.dataset.del;
+  if (editId) {
+    const worker = STATE.colaboradores.find(w => w.id === editId);
+    if (worker) openWorkerModal(worker);
+  } else if (delId) {
+    if (confirm("Excluir este colaborador do consolidado?")) {
+      await Store.deleteWorker(delId);
+      toast("Colaborador removido.");
+      await reload();
+    }
+  }
+});
+
+/* -------------------------------------------------------------------------
+   NAVEGAÇÃO / TABS
+   ------------------------------------------------------------------------- */
+document.querySelectorAll("nav.tabs button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("nav.tabs button").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(`view-${btn.dataset.view}`).classList.add("active");
+  });
+});
+
+document.querySelectorAll("#f-busca, #f-obra, #f-status, #f-funcao").forEach(el => {
+  el.addEventListener("input", renderConsolidado);
+  el.addEventListener("change", renderConsolidado);
+});
+
+/* -------------------------------------------------------------------------
+   MODALS genéricos
+   ------------------------------------------------------------------------- */
+function closeModals() {
+  document.querySelectorAll(".modal-backdrop").forEach(m => m.classList.remove("open"));
+}
+document.querySelectorAll("[data-close]").forEach(el => el.addEventListener("click", closeModals));
+document.querySelectorAll(".modal-backdrop").forEach(backdrop => {
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeModals(); });
+});
+
+/* -------------------------------------------------------------------------
+   TOASTS
+   ------------------------------------------------------------------------- */
+function toast(msg, isError) {
+  const wrap = document.getElementById("toast-wrap");
+  const el = document.createElement("div");
+  el.className = "toast" + (isError ? " error" : "");
+  el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(() => el.remove(), 5000);
+}
+
+/* -------------------------------------------------------------------------
+   INIT
+   ------------------------------------------------------------------------- */
+checkSiteAccess();
+reload();
+</script>
+</body>
+</html>
