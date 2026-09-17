@@ -222,6 +222,9 @@
   .kanban-card .kc-marca{color:var(--text-dim);font-size:.72rem;margin-bottom:6px;}
   .kanban-card .kc-meta{display:flex;flex-wrap:wrap;gap:5px;align-items:center;font-size:.68rem;color:var(--text-faint);}
   .kanban-card .kc-tag{background:#EEF2F5;padding:2px 7px;border-radius:5px;}
+  .kanban-card .kc-horimetro{font-size:.7rem;color:var(--text-dim);margin-top:6px;font-weight:600;}
+  .kanban-card .kc-horimetro.alert{color:var(--danger);}
+  .kanban-card .kc-manut-info{font-size:.68rem;color:var(--warning);margin-top:4px;font-style:italic;}
   .badge.eq-ativo{background:rgba(11,131,178,.12);color:var(--accent);}
   .badge.eq-inativo{background:rgba(220,38,38,.1);color:var(--danger);}
   .badge.eq-manutencao{background:rgba(180,83,9,.1);color:var(--warning);}
@@ -539,6 +542,26 @@
             <option>INATIVO</option>
             <option>MANUTENÇÃO</option>
           </select>
+        </div>
+        <div class="field">
+          <label>Horímetro atual</label>
+          <input type="text" id="eqf-horimetro-atual" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label>Horímetro da próxima manutenção</label>
+          <input type="text" id="eqf-horimetro-manutencao" inputmode="numeric">
+        </div>
+        <div class="field full" id="eqf-manutencao-box" style="display:none;background:var(--accent-dim);border-radius:8px;padding:12px;">
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+            <div class="field">
+              <label>Motivo da manutenção</label>
+              <input type="text" id="eqf-motivo">
+            </div>
+            <div class="field">
+              <label>Previsão de devolução</label>
+              <input type="text" id="eqf-previsao" placeholder="dd/mm/aaaa">
+            </div>
+          </div>
         </div>
         <div class="field">
           <label>Marca</label>
@@ -1162,6 +1185,21 @@ function getFilteredEquip() {
 
 const EQUIP_SITUACAO_ORDER = ["ATIVO", "MANUTENÇÃO", "INATIVO"];
 
+// Quantas horas antes do horímetro de manutenção o card já entra em alerta (vermelho).
+const HORIMETRO_ALERTA = 50;
+
+function parseHorimetro(v) {
+  const n = parseFloat(String(v ?? "").replace(",", "."));
+  return isFinite(n) ? n : null;
+}
+
+function equipHorimetroAlert(w) {
+  const atual = parseHorimetro(w.horimetroAtual);
+  const limite = parseHorimetro(w.horimetroManutencao);
+  if (atual === null || limite === null) return false;
+  return (limite - atual) <= HORIMETRO_ALERTA;
+}
+
 function renderEquipKanban() {
   const list = getFilteredEquip();
   document.getElementById("eq-count").textContent = `${list.length} de ${EQUIP_STATE.equipamentos.length} equipamento(s)`;
@@ -1206,6 +1244,8 @@ function renderEquipKanban() {
                 ${w.placa ? `<span class="kc-tag">${escapeHtml(w.placa)}</span>` : ""}
                 ${w.operador ? `<span class="kc-tag">${escapeHtml(w.operador)}</span>` : ""}
               </div>
+              ${w.horimetroAtual ? `<div class="kc-horimetro ${equipHorimetroAlert(w) ? "alert" : ""}">⏱ Horímetro: ${escapeHtml(w.horimetroAtual)}${w.horimetroManutencao ? " / " + escapeHtml(w.horimetroManutencao) : ""} h</div>` : ""}
+              ${w.situacao === "MANUTENÇÃO" && (w.motivoManutencao || w.previsaoDevolucao) ? `<div class="kc-manut-info">${escapeHtml(w.motivoManutencao || "")}${w.motivoManutencao && w.previsaoDevolucao ? " · " : ""}${w.previsaoDevolucao ? "volta em " + escapeHtml(w.previsaoDevolucao) : ""}</div>` : ""}
             </div>
           `).join("") || `<div class="empty-state" style="padding:24px 10px;font-size:.72rem;">Vazio</div>`}
         </div>
@@ -1280,12 +1320,22 @@ document.querySelectorAll(".group-toggle .gt-btn").forEach(btn => {
   document.getElementById(id).addEventListener("change", renderEquipKanban);
 });
 
+function toggleEquipManutencaoBox() {
+  const isManutencao = document.getElementById("eqf-situacao").value === "MANUTENÇÃO";
+  document.getElementById("eqf-manutencao-box").style.display = isManutencao ? "" : "none";
+}
+document.getElementById("eqf-situacao").addEventListener("change", toggleEquipManutencaoBox);
+
 function openEquipModal(item) {
   document.getElementById("equip-modal-title").textContent = item ? "Editar equipamento" : "Adicionar equipamento";
   const f = id => document.getElementById(id);
   f("eqf-tipo").value = item?.tipo || "";
   f("eqf-obra").value = item?.obra || "";
   f("eqf-situacao").value = ["ATIVO", "INATIVO", "MANUTENÇÃO"].includes(item?.situacao) ? item.situacao : "ATIVO";
+  f("eqf-horimetro-atual").value = item?.horimetroAtual || "";
+  f("eqf-horimetro-manutencao").value = item?.horimetroManutencao || "";
+  f("eqf-motivo").value = item?.motivoManutencao || "";
+  f("eqf-previsao").value = item?.previsaoDevolucao || "";
   f("eqf-marca").value = item?.marca || "";
   f("eqf-modelo").value = item?.modelo || "";
   f("eqf-operador").value = item?.operador || "";
@@ -1301,6 +1351,7 @@ function openEquipModal(item) {
   f("eqf-frente").value = item?.frente || "";
   f("eqf-obs").value = item?.obs || "";
   document.getElementById("modal-equip").dataset.editId = item?.id || "";
+  toggleEquipManutencaoBox();
   document.getElementById("modal-equip").classList.add("open");
 }
 
@@ -1311,12 +1362,16 @@ document.getElementById("btn-save-equip").addEventListener("click", async () => 
   const tipo = f("eqf-tipo"), obra = f("eqf-obra");
   if (!tipo || !obra) { toast("Preencha ao menos Tipo e Obra.", true); return; }
   const editId = document.getElementById("modal-equip").dataset.editId;
+  const situacao = f("eqf-situacao");
   const rec = {
     id: editId || undefined,
-    tipo, obra, situacao: f("eqf-situacao"), marca: f("eqf-marca"), modelo: f("eqf-modelo"),
+    tipo, obra, situacao, marca: f("eqf-marca"), modelo: f("eqf-modelo"),
     operador: f("eqf-operador"), placa: f("eqf-placa"), proprietario: f("eqf-proprietario"),
     locacao: f("eqf-locacao"), valor: f("eqf-valor"), tag: f("eqf-tag"), renavam: f("eqf-renavam"),
-    chassis: f("eqf-chassis"), ano: f("eqf-ano"), sieng: f("eqf-sieng"), frente: f("eqf-frente"), obs: f("eqf-obs")
+    chassis: f("eqf-chassis"), ano: f("eqf-ano"), sieng: f("eqf-sieng"), frente: f("eqf-frente"), obs: f("eqf-obs"),
+    horimetroAtual: f("eqf-horimetro-atual"), horimetroManutencao: f("eqf-horimetro-manutencao"),
+    motivoManutencao: situacao === "MANUTENÇÃO" ? f("eqf-motivo") : "",
+    previsaoDevolucao: situacao === "MANUTENÇÃO" ? f("eqf-previsao") : ""
   };
   await EquipStore.saveItem(rec);
   closeModals();
@@ -1356,6 +1411,10 @@ const EQUIP_HEADER_MAP = [
   { key: "ano",          match: h => h.includes("ANO") },
   { key: "placa",        match: h => h.includes("PLACA") },
   { key: "situacao",     match: h => h.includes("SITUA") },
+  { key: "horimetroAtual", match: h => h.includes("HORÍMETRO ATUAL") || h.includes("HORIMETRO ATUAL") },
+  { key: "horimetroManutencao", match: h => h.includes("HORÍMETRO MANUTEN") || h.includes("HORIMETRO MANUTEN") },
+  { key: "motivoManutencao", match: h => h.includes("MOTIVO") },
+  { key: "previsaoDevolucao", match: h => h.includes("PREVIS") },
   { key: "sieng",        match: h => h.includes("SIENG") },
   { key: "frente",       match: h => h.includes("FRENTE") },
   { key: "obs",          match: h => h.includes("OBSERVA") || h === "OBS." },
@@ -1420,7 +1479,9 @@ function parseEquipSheetRows(rows) {
       proprietario: get("proprietario"), locacao: get("locacao"), valor: get("valor"),
       tag: get("tag"), renavam: get("renavam"), chassis: get("chassis"), ano: get("ano"),
       placa: get("placa"), situacao: get("situacao") || "ATIVO", sieng: get("sieng"),
-      frente: get("frente"), obs: get("obs")
+      frente: get("frente"), obs: get("obs"),
+      horimetroAtual: get("horimetroAtual"), horimetroManutencao: get("horimetroManutencao"),
+      motivoManutencao: get("motivoManutencao"), previsaoDevolucao: get("previsaoDevolucao")
     });
   }
 
@@ -1618,12 +1679,12 @@ document.getElementById("btn-confirm-import").addEventListener("click", async ()
 document.getElementById("btn-export").addEventListener("click", () => {
   if (!requireUnlock()) return;
   if (currentModule === "equipamentos") {
-    const rows = [["OBRA","TIPO","OPERADOR","MARCA","MODELO","PROPRIETÁRIO/LOCADOR","LOCAÇÃO","VALOR","TAG/PATRIMONIO","RENAVAM","CHASSIS/N.º SERIE","ANO","PLACA","SITUAÇÃO","OBRA (COD. SIENGE)","FRENTE SERVIÇO","OBS."]];
+    const rows = [["OBRA","TIPO","OPERADOR","MARCA","MODELO","PROPRIETÁRIO/LOCADOR","LOCAÇÃO","VALOR","TAG/PATRIMONIO","RENAVAM","CHASSIS/N.º SERIE","ANO","PLACA","SITUAÇÃO","HORÍMETRO ATUAL","HORÍMETRO MANUTENÇÃO","MOTIVO MANUTENÇÃO","PREVISÃO DEVOLUÇÃO","OBRA (COD. SIENGE)","FRENTE SERVIÇO","OBS."]];
     const byObra = {};
     EQUIP_STATE.equipamentos.forEach(w => { (byObra[w.obra || "SEM OBRA"] ||= []).push(w); });
     Object.entries(byObra).sort(([a],[b]) => a.localeCompare(b)).forEach(([obra, list]) => {
       rows.push([obra]);
-      list.forEach(w => rows.push([w.obra||"", w.tipo||"", w.operador||"", w.marca||"", w.modelo||"", w.proprietario||"", w.locacao||"", w.valor||"", w.tag||"", w.renavam||"", w.chassis||"", w.ano||"", w.placa||"", w.situacao||"", w.sieng||"", w.frente||"", w.obs||""]));
+      list.forEach(w => rows.push([w.obra||"", w.tipo||"", w.operador||"", w.marca||"", w.modelo||"", w.proprietario||"", w.locacao||"", w.valor||"", w.tag||"", w.renavam||"", w.chassis||"", w.ano||"", w.placa||"", w.situacao||"", w.horimetroAtual||"", w.horimetroManutencao||"", w.motivoManutencao||"", w.previsaoDevolucao||"", w.sieng||"", w.frente||"", w.obs||""]));
       rows.push(["TOTAL " + obra, list.length]);
       rows.push([]);
     });
