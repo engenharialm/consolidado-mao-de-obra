@@ -599,6 +599,15 @@
           <label>Tipo *</label>
           <input type="text" id="eqf-tipo">
         </div>
+        <div class="field full">
+          <label>Foto do equipamento</label>
+          <div id="eqf-foto-preview" style="border:1px dashed var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;"></div>
+          <input type="file" id="eqf-foto-input" accept="image/*" style="display:none;">
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="btn btn-ghost btn-sm" id="eqf-foto-select-btn">Selecionar foto</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="eqf-foto-remove-btn" style="display:none;">Remover foto</button>
+          </div>
+        </div>
         <div class="field">
           <label>Obra *</label>
           <input type="text" id="eqf-obra" list="equip-obra-list">
@@ -929,6 +938,43 @@ function makeStore({ itemsKey, colName, obrasColName, logColName, lsKey }) {
 
 const Store = makeStore({ itemsKey: "colaboradores", colName: "colaboradores", obrasColName: "obras", logColName: "importacoes", lsKey: LS_KEY });
 const EquipStore = makeStore({ itemsKey: "equipamentos", colName: "equipamentos", obrasColName: "equipamentosObras", logColName: "equipamentosImportacoes", lsKey: LS_KEY_EQUIP });
+
+// Fotos de equipamento ficam numa coleção/chave separada — carregadas só quando
+// o equipamento é aberto, para não pesar a lista principal.
+const LS_KEY_EQUIP_FOTOS = "consolidadoEquipamentosFotos";
+
+function novoEquipId() {
+  return useFirebase ? fs.doc(fs.collection(db, "equipamentos")).id : cryptoId();
+}
+
+async function getEquipFoto(id) {
+  if (useFirebase) {
+    return withTimeout(async () => {
+      const snap = await fs.getDoc(fs.doc(db, "equipamentosFotos", id));
+      return snap.exists() ? (snap.data().dataUrl || null) : null;
+    });
+  }
+  const map = JSON.parse(localStorage.getItem(LS_KEY_EQUIP_FOTOS) || "{}");
+  return map[id] || null;
+}
+
+async function setEquipFoto(id, dataUrl) {
+  if (useFirebase) {
+    return withTimeout(() => fs.setDoc(fs.doc(db, "equipamentosFotos", id), { dataUrl, updatedAt: Date.now() }));
+  }
+  const map = JSON.parse(localStorage.getItem(LS_KEY_EQUIP_FOTOS) || "{}");
+  map[id] = dataUrl;
+  localStorage.setItem(LS_KEY_EQUIP_FOTOS, JSON.stringify(map));
+}
+
+async function deleteEquipFoto(id) {
+  if (useFirebase) {
+    return withTimeout(() => fs.deleteDoc(fs.doc(db, "equipamentosFotos", id)));
+  }
+  const map = JSON.parse(localStorage.getItem(LS_KEY_EQUIP_FOTOS) || "{}");
+  delete map[id];
+  localStorage.setItem(LS_KEY_EQUIP_FOTOS, JSON.stringify(map));
+}
 
 function cryptoId() { return "id-" + Math.random().toString(36).slice(2) + Date.now().toString(36); }
 function slugify(s) { return (s || "sem-obra").toString().trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "SEM-OBRA"; }
@@ -1358,7 +1404,7 @@ function renderEquipKanban() {
           ${items.map(w => `
             <div class="kanban-card" draggable="true" data-id="${w.id}">
               <div style="display:flex;justify-content:space-between;gap:6px;">
-                <div class="kc-tipo">${escapeHtml(w.tipo)}</div>
+                <div class="kc-tipo">${w.temFoto ? "📷 " : ""}${escapeHtml(w.tipo)}</div>
                 <button class="icon-btn del" data-del="${w.id}" title="Excluir" style="width:20px;height:20px;flex-shrink:0;">✕</button>
               </div>
               <div class="kc-marca">${escapeHtml([w.marca, w.modelo].filter(Boolean).join(" ")) || "—"}</div>
@@ -1397,6 +1443,7 @@ function wireEquipDragDrop() {
       e.stopPropagation();
       if (!confirm("Excluir este equipamento do consolidado?")) return;
       await EquipStore.deleteItem(btn.dataset.del);
+      await deleteEquipFoto(btn.dataset.del);
       toast("Equipamento removido.");
       await reloadEquip();
     });
@@ -1451,7 +1498,7 @@ function renderEquipListaMestre() {
   document.getElementById("eq-count").textContent = `${list.length} de ${EQUIP_STATE.equipamentos.length} equipamento(s)`;
   const rows = list.map(w => `
     <tr>
-      <td><strong>${escapeHtml(w.tipo)}</strong><div class="muted" style="font-size:.72rem;">${escapeHtml([w.marca, w.modelo].filter(Boolean).join(" ")) || "—"}</div></td>
+      <td><strong>${w.temFoto ? "📷 " : ""}${escapeHtml(w.tipo)}</strong><div class="muted" style="font-size:.72rem;">${escapeHtml([w.marca, w.modelo].filter(Boolean).join(" ")) || "—"}</div></td>
       <td class="muted">${escapeHtml((w.tag && w.tag !== "-" ? w.tag : w.placa) || "—")}</td>
       <td class="muted">${escapeHtml(inferCategoriaEquip(w.tipo))}</td>
       <td><span class="badge ${equipStatusClass(w.situacao)}">${escapeHtml(w.situacao || "—")}</span></td>
@@ -1480,6 +1527,7 @@ document.getElementById("equip-lista-table").addEventListener("click", async (e)
   } else if (delId) {
     if (confirm("Excluir este equipamento do consolidado?")) {
       await EquipStore.deleteItem(delId);
+      await deleteEquipFoto(delId);
       toast("Equipamento removido.");
       await reloadEquip();
     }
@@ -1561,9 +1609,62 @@ function collectManutItens() {
     .filter(it => it.nome);
 }
 
+let equipFotoPending = null; // null = sem alteração | {action:"set", dataUrl} | {action:"clear"}
+let equipFotoModalId = null;
+
+function renderEquipFotoPreview(dataUrl) {
+  const box = document.getElementById("eqf-foto-preview");
+  document.getElementById("eqf-foto-remove-btn").style.display = dataUrl ? "" : "none";
+  box.innerHTML = dataUrl
+    ? `<img src="${dataUrl}" style="max-width:100%;max-height:180px;display:block;margin:0 auto;">`
+    : `<div class="empty-state" style="padding:18px;font-size:.72rem;">Sem foto</div>`;
+}
+
+document.getElementById("eqf-foto-select-btn").addEventListener("click", () => document.getElementById("eqf-foto-input").click());
+
+document.getElementById("eqf-foto-input").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 1000;
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const scale = maxDim / Math.max(width, height);
+        width = Math.round(width * scale); height = Math.round(height * scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+      equipFotoPending = { action: "set", dataUrl };
+      renderEquipFotoPreview(dataUrl);
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById("eqf-foto-remove-btn").addEventListener("click", () => {
+  equipFotoPending = { action: "clear" };
+  renderEquipFotoPreview(null);
+});
+
 function openEquipModal(item) {
   document.getElementById("equip-modal-title").textContent = item ? "Editar equipamento" : "Adicionar equipamento";
   const f = id => document.getElementById(id);
+  const id = item?.id || novoEquipId();
+  document.getElementById("modal-equip").dataset.editId = id;
+  document.getElementById("modal-equip").dataset.isNew = item ? "" : "1";
+  equipFotoPending = null;
+  equipFotoModalId = id;
+  renderEquipFotoPreview(null);
+  if (item?.temFoto) {
+    getEquipFoto(id).then(url => { if (equipFotoModalId === id) renderEquipFotoPreview(url); });
+  }
   f("eqf-tipo").value = item?.tipo || "";
   f("eqf-obra").value = item?.obra || "";
   f("eqf-situacao").value = ["ATIVO", "INATIVO", "MANUTENÇÃO"].includes(item?.situacao) ? item.situacao : "ATIVO";
@@ -1586,7 +1687,6 @@ function openEquipModal(item) {
   f("eqf-frente").value = item?.frente || "";
   f("eqf-obs").value = item?.obs || "";
   renderManutItens(item?.manutencaoItens);
-  document.getElementById("modal-equip").dataset.editId = item?.id || "";
   toggleEquipManutencaoBox();
   document.getElementById("modal-equip").classList.add("open");
 }
@@ -1598,9 +1698,10 @@ document.getElementById("btn-save-equip").addEventListener("click", async () => 
   const tipo = f("eqf-tipo"), obra = f("eqf-obra");
   if (!tipo || !obra) { toast("Preencha ao menos Tipo e Obra.", true); return; }
   const editId = document.getElementById("modal-equip").dataset.editId;
+  const isNew = document.getElementById("modal-equip").dataset.isNew === "1";
   const situacao = f("eqf-situacao");
   const rec = {
-    id: editId || undefined,
+    id: editId,
     tipo, obra, situacao, marca: f("eqf-marca"), modelo: f("eqf-modelo"),
     operador: f("eqf-operador"), placa: f("eqf-placa"), proprietario: f("eqf-proprietario"),
     locacao: f("eqf-locacao"), valor: f("eqf-valor"), tag: f("eqf-tag"), renavam: f("eqf-renavam"),
@@ -1610,9 +1711,13 @@ document.getElementById("btn-save-equip").addEventListener("click", async () => 
     previsaoDevolucao: situacao === "MANUTENÇÃO" ? f("eqf-previsao") : "",
     manutencaoItens: collectManutItens()
   };
+  if (equipFotoPending?.action === "set") rec.temFoto = true;
+  else if (equipFotoPending?.action === "clear") rec.temFoto = false;
   await EquipStore.saveItem(rec);
+  if (equipFotoPending?.action === "set") await setEquipFoto(editId, equipFotoPending.dataUrl);
+  else if (equipFotoPending?.action === "clear") await deleteEquipFoto(editId);
   closeModals();
-  toast(editId ? "Equipamento atualizado." : "Equipamento adicionado.");
+  toast(isNew ? "Equipamento adicionado." : "Equipamento atualizado.");
   await reloadEquip();
 });
 
