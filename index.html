@@ -482,7 +482,10 @@
         </div>
 
         <div class="section-title">Equipamentos por obra
-          <button class="btn btn-accent btn-sm" id="btn-export-relatorio">Exportar Excel</button>
+          <span style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" id="btn-relatorio-pdf">Gerar Relatório PDF</button>
+            <button class="btn btn-accent btn-sm" id="btn-export-relatorio">Exportar Excel</button>
+          </span>
         </div>
         <div class="panel table-wrap">
           <table>
@@ -1556,6 +1559,120 @@ function renderEquipRelatorio() {
 }
 
 document.getElementById("btn-export-relatorio").addEventListener("click", () => document.getElementById("btn-export").click());
+
+/* -------------------------------------------------------------------------
+   EQUIPAMENTOS — RELATÓRIO PDF (padrão "EFETIVO DE EQUIPAMENTOS LM")
+   ------------------------------------------------------------------------- */
+function gerarRelatorioPDF() {
+  if (!requireUnlock()) return;
+  const all = EQUIP_STATE.equipamentos;
+  const total = all.length;
+  const proprios = all.filter(w => equipPropriedadeLabel(w.locacao) === "Próprio").length;
+  const locados = all.filter(w => equipPropriedadeLabel(w.locacao) === "Alugado").length;
+  const ativo = all.filter(w => equipStatusClass(w.situacao) === "eq-ativo").length;
+  const manutencao = all.filter(w => equipStatusClass(w.situacao) === "eq-manutencao").length;
+  const inativo = all.filter(w => equipStatusClass(w.situacao) === "eq-inativo").length;
+  const pct = n => total ? (n / total * 100).toFixed(1) : "0.0";
+
+  const byObra = {};
+  all.forEach(w => { (byObra[w.obra || "SEM OBRA"] ||= []).push(w); });
+  const obraKeys = Object.keys(byObra).sort((a, b) => a.localeCompare(b));
+
+  const situColor = (s) => {
+    const cls = equipStatusClass(s);
+    if (cls === "eq-ativo") return "color:#0B83B2;font-weight:700;";
+    if (cls === "eq-manutencao") return "color:#B45309;font-weight:700;";
+    if (cls === "eq-inativo") return "color:#DC2626;font-weight:700;";
+    return "";
+  };
+
+  let tableRows = "";
+  obraKeys.forEach(obra => {
+    const items = byObra[obra].slice().sort((a, b) => (a.tipo || "").localeCompare(b.tipo || ""));
+    tableRows += `<tr class="grp"><td colspan="7">${escapeHtml(obra)}</td></tr>`;
+    items.forEach(w => {
+      const propLabel = equipPropriedadeLabel(w.locacao);
+      tableRows += `<tr>
+        <td>${escapeHtml(w.obra || "")}</td>
+        <td>${escapeHtml(w.tipo || "")}</td>
+        <td>${escapeHtml(w.operador || "")}</td>
+        <td>${escapeHtml(w.marca || "")}</td>
+        <td>${escapeHtml(w.modelo || "")}</td>
+        <td>${propLabel === "Próprio" ? "PRÓPRIO" : propLabel === "Alugado" ? "LOCADO" : "—"}</td>
+        <td style="${situColor(w.situacao)}">${escapeHtml(w.situacao || "")}</td>
+      </tr>`;
+    });
+    // "Equip. LM" = equipamentos cujo Proprietário/Locador está registrado como "LM" (frota própria da empresa).
+    const lmCount = items.filter(w => (w.proprietario || "").trim().toUpperCase() === "LM").length;
+    tableRows += `<tr class="tot"><td colspan="2"><strong>TOTAL ${escapeHtml(obra)}</strong></td><td><strong>${items.length}</strong></td><td colspan="2"><strong>EQUIP. LM:</strong></td><td colspan="2"><strong>${lmCount}</strong></td></tr>`;
+  });
+
+  const porTipo = {};
+  all.forEach(w => {
+    const t = w.tipo || "—";
+    porTipo[t] ||= { ATIVO: 0, MANUT: 0, INATIVO: 0 };
+    const cls = equipStatusClass(w.situacao);
+    if (cls === "eq-ativo") porTipo[t].ATIVO++;
+    else if (cls === "eq-manutencao") porTipo[t].MANUT++;
+    else if (cls === "eq-inativo") porTipo[t].INATIVO++;
+  });
+  const resumoRows = Object.entries(porTipo).sort(([a], [b]) => a.localeCompare(b)).map(([tipo, c]) => {
+    const tot = c.ATIVO + c.MANUT + c.INATIVO;
+    return `<tr><td>${escapeHtml(tipo)}</td><td>${c.ATIVO || ""}</td><td>${c.MANUT || ""}</td><td>${c.INATIVO || ""}</td><td><strong>${tot}</strong></td></tr>`;
+  }).join("");
+
+  const logoUrl = new URL("logo-lm.png", location.href).href;
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Efetivo de Equipamentos LM</title>
+<style>
+  *{box-sizing:border-box;}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#111;margin:16px;}
+  .header{border:2px solid #111;display:flex;align-items:center;padding:10px 16px;margin-bottom:14px;gap:20px;}
+  .header img{width:60px;flex-shrink:0;}
+  .header .title{font-size:16px;font-weight:800;text-align:center;flex:1;}
+  .header .title small{display:block;font-size:10px;font-weight:400;margin-top:4px;}
+  .header .stats{font-size:10.5px;white-space:nowrap;}
+  .header .stats div{margin:3px 0;}
+  .header .stats b{margin-right:4px;}
+  table{width:100%;border-collapse:collapse;margin-bottom:18px;}
+  th,td{border:1px solid #999;padding:4px 6px;font-size:9.5px;text-align:left;}
+  thead th{background:#0B83B2;color:#fff;text-transform:uppercase;font-size:9px;}
+  tr.grp td{background:#DCEEF6;font-weight:800;text-align:center;}
+  tr.tot td{background:#EDEFF2;}
+  h2{font-size:13px;margin:18px 0 8px;}
+  .no-print{margin-top:10px;}
+  @media print{.no-print{display:none;} @page{size:A4 landscape;margin:10mm;}}
+</style>
+</head>
+<body>
+  <div class="header">
+    <img src="${logoUrl}" alt="LM">
+    <div class="title">EFETIVO DE EQUIPAMENTOS LM<small>Gerado em ${new Date().toLocaleDateString("pt-BR")}</small></div>
+    <div class="stats">
+      <div><b>Total de equipamentos</b> ${total} &nbsp; <b>Próprios</b> ${proprios} &nbsp; <b>Locados</b> ${locados} &nbsp; <b>Em manutenção</b> ${manutencao}</div>
+      <div><b>% Próprios</b> ${pct(proprios)}% &nbsp; <b>% Locados</b> ${pct(locados)}% &nbsp; <b>Inativo</b> ${inativo} &nbsp; <b>Em operação</b> ${ativo}</div>
+    </div>
+  </div>
+  <table>
+    <thead><tr><th>Obra</th><th>Tipo</th><th>Operador</th><th>Marca</th><th>Modelo</th><th>Locação</th><th>Situação</th></tr></thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+  <h2>Resumo por tipo de equipamento</h2>
+  <table>
+    <thead><tr><th>Nome do equipamento</th><th>Ativo</th><th>Manutenção</th><th>Inativo</th><th>Total Geral</th></tr></thead>
+    <tbody>${resumoRows}<tr class="tot"><td><strong>Total Geral</strong></td><td><strong>${ativo}</strong></td><td><strong>${manutencao}</strong></td><td><strong>${inativo}</strong></td><td><strong>${total}</strong></td></tr></tbody>
+  </table>
+  <button class="no-print" onclick="window.print()" style="padding:10px 16px;font-size:13px;cursor:pointer;">Imprimir / Salvar PDF</button>
+</body></html>`;
+
+  const win = window.open("", "_blank");
+  if (!win) { toast("Seu navegador bloqueou a janela do relatório. Permita pop-ups para este site.", true); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => { win.focus(); win.print(); }, 400);
+}
+
+document.getElementById("btn-relatorio-pdf").addEventListener("click", gerarRelatorioPDF);
 
 function toggleEquipManutencaoBox() {
   const isManutencao = document.getElementById("eqf-situacao").value === "MANUTENÇÃO";
