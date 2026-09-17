@@ -1,28 +1,33 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 260" width="300" height="260">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 330 336" width="330" height="336">
   <defs>
     <style>
-      .letter-out{fill:#bfe4fb;stroke:#0B3C63;stroke-width:6;}
-      .letter-in{fill:#1591D8;stroke:#0B3C63;stroke-width:6;}
-      .arrow{fill:none;stroke-linecap:round;}
-      .arrow-light{stroke:#bfe4fb;}
-      .arrow-dark{stroke:#0B5D9E;}
+      .ring{fill:none;}
+      .arc-light{stroke:#8FCBEF;}
+      .arc-dark{stroke:#1E6FAE;}
+      .arrow-light{fill:#8FCBEF;}
+      .letter{fill:#BFE4FB;stroke:#0B3C63;stroke-width:5;font-family:Arial,Helvetica,sans-serif;font-weight:900;}
+      .center{fill:#1591D8;stroke:#0B3C63;stroke-width:4;font-family:Arial,Helvetica,sans-serif;font-weight:900;}
     </style>
   </defs>
-  <!-- top arc (light) to P -->
-  <path class="arrow arrow-light" d="M60,95 A100,80 0 0 1 150,35" stroke-width="26"/>
-  <polygon class="letter-out" points="70,55 108,62 92,100" />
-  <!-- right arc (dark) to D -->
-  <path class="arrow arrow-dark" d="M150,35 A100,80 0 0 1 240,130" stroke-width="26"/>
-  <!-- bottom-right arc (light) to C -->
-  <path class="arrow arrow-light" d="M240,130 A100,80 0 0 1 150,225" stroke-width="26"/>
-  <polygon class="letter-out" points="230,190 195,175 220,145" />
-  <!-- bottom-left arc (dark) to A -->
-  <path class="arrow arrow-dark" d="M150,225 A100,80 0 0 1 60,95" stroke-width="26"/>
 
-  <text x="150" y="45" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="62" class="letter-out">P</text>
-  <text x="252" y="150" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="62" class="letter-out">D</text>
-  <text x="150" y="248" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="62" class="letter-out">C</text>
-  <text x="48" y="150" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="62" class="letter-out">A</text>
+  <!-- A -> P (superior esquerdo), claro -->
+  <path class="ring arc-light" d="M75,165 A90,90 0 0 1 165,75" stroke-width="26" stroke-linecap="round"/>
+  <!-- P -> D (superior direito), escuro -->
+  <path class="ring arc-dark" d="M165,75 A90,90 0 0 1 255,165" stroke-width="26" stroke-linecap="round"/>
+  <!-- D -> C (inferior direito), claro -->
+  <path class="ring arc-light" d="M255,165 A90,90 0 0 1 165,255" stroke-width="26" stroke-linecap="round"/>
+  <!-- C -> A (inferior esquerdo), escuro -->
+  <path class="ring arc-dark" d="M165,255 A90,90 0 0 1 75,165" stroke-width="26" stroke-linecap="round"/>
 
-  <text x="150" y="150" text-anchor="middle" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="70" class="letter-in">LM</text>
+  <!-- seta entrando em P (vinda da esquerda, aponta p/ direita) -->
+  <polygon class="arrow-light" points="181,75 157,60 157,90"/>
+  <!-- seta entrando em C (vinda da direita, aponta p/ esquerda) -->
+  <polygon class="arrow-light" points="149,255 173,240 173,270"/>
+
+  <text x="165" y="48" text-anchor="middle" class="letter" font-size="56">P</text>
+  <text x="300" y="183" text-anchor="middle" class="letter" font-size="56">D</text>
+  <text x="165" y="318" text-anchor="middle" class="letter" font-size="56">C</text>
+  <text x="30" y="183" text-anchor="middle" class="letter" font-size="56">A</text>
+
+  <text x="165" y="176" text-anchor="middle" class="center" font-size="62">LM</text>
 </svg>
