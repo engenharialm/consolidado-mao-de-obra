@@ -171,6 +171,63 @@
 
   .empty-state{padding:50px 20px;text-align:center;color:var(--text-faint);font-size:.85rem;}
 
+  /* MODULE SWITCH */
+  nav.module-tabs{
+    display:flex;gap:4px;padding:0 28px;border-bottom:1px solid var(--border);
+    background:var(--bg);overflow-x:auto;
+  }
+  nav.module-tabs button{
+    background:none;border:none;color:var(--text-dim);font-family:inherit;
+    font-weight:600;font-size:.9rem;padding:14px 16px;cursor:pointer;
+    border-bottom:2px solid transparent;white-space:nowrap;
+  }
+  nav.module-tabs button.active{color:var(--accent);border-bottom-color:var(--accent);}
+  nav.module-tabs button:hover{color:var(--text);}
+
+  /* EQUIPAMENTOS: toolbar + kanban */
+  .equip-toolbar{
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+    padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg-elev);
+  }
+  .equip-toolbar input[type=text], .equip-toolbar select{
+    background:var(--bg);border:1px solid var(--border);color:var(--text);
+    padding:9px 12px;border-radius:8px;font-family:inherit;font-size:.8rem;
+  }
+  .equip-toolbar input[type=text]{min-width:200px;flex:1;}
+  .equip-toolbar select{cursor:pointer;}
+  .equip-toolbar .spacer{flex:1;}
+  .group-toggle{display:flex;align-items:center;gap:8px;font-size:.76rem;color:var(--text-dim);}
+  .group-toggle .gt-btn{
+    background:var(--bg);border:1px solid var(--border);color:var(--text-dim);
+    padding:7px 12px;border-radius:7px;font-family:inherit;font-size:.76rem;font-weight:600;cursor:pointer;
+  }
+  .group-toggle .gt-btn.active{background:var(--accent);color:#08130E;border-color:var(--accent);}
+
+  .kanban{display:flex;gap:14px;padding:20px 28px 40px;overflow-x:auto;align-items:flex-start;}
+  .kanban-col{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    width:300px;flex-shrink:0;display:flex;flex-direction:column;max-height:calc(100vh - 220px);
+  }
+  .kanban-col.drag-over{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-dim);}
+  .kanban-col-head{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+  .kanban-col-head h3{font-size:.84rem;font-weight:700;}
+  .kanban-col-head .kc-count{font-size:.72rem;font-weight:700;color:var(--accent);background:var(--accent-dim);padding:2px 8px;border-radius:999px;}
+  .kanban-col-body{padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;flex:1;}
+  .kanban-card{
+    background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;
+    padding:10px 12px;cursor:grab;font-size:.78rem;
+  }
+  .kanban-card:hover{border-color:#3A4450;}
+  .kanban-card.dragging{opacity:.4;}
+  .kanban-card .kc-tipo{font-weight:700;margin-bottom:3px;}
+  .kanban-card .kc-marca{color:var(--text-dim);font-size:.72rem;margin-bottom:6px;}
+  .kanban-card .kc-meta{display:flex;flex-wrap:wrap;gap:5px;align-items:center;font-size:.68rem;color:var(--text-faint);}
+  .kanban-card .kc-tag{background:#1E252B;padding:2px 7px;border-radius:5px;}
+  .badge.eq-ativo{background:rgba(46,232,150,.14);color:var(--accent);}
+  .badge.eq-inativo{background:rgba(255,92,114,.14);color:var(--danger);}
+  .badge.eq-manutencao{background:rgba(246,150,60,.14);color:var(--warning);}
+  .badge.eq-outro{background:#232A30;color:var(--text-dim);}
+
   .obra-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;}
   .obra-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
   .obra-card-head{padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--border);}
@@ -231,7 +288,7 @@
     main{padding:16px;}
     .form-grid{grid-template-columns:1fr;}
     header{padding:12px 16px;}
-    nav.tabs{padding:0 16px;}
+    nav.tabs, nav.module-tabs{padding:0 16px;}
   }
 </style>
 </head>
@@ -253,10 +310,10 @@
 
   <header>
     <div class="brand">
-      <div class="logo">MO</div>
+      <div class="logo" id="brand-logo">MO</div>
       <div>
-        <h1>Consolidado de Mão de Obra</h1>
-        <span>LM CONSTRUTORA — EFETIVO POR OBRA</span>
+        <h1 id="brand-title">Consolidado de Mão de Obra</h1>
+        <span id="brand-sub">LM CONSTRUTORA — EFETIVO POR OBRA</span>
       </div>
     </div>
     <div class="header-actions">
@@ -270,6 +327,12 @@
     </div>
   </header>
 
+  <nav class="module-tabs">
+    <button data-module="maodeobra" class="active">👷 Mão de Obra</button>
+    <button data-module="equipamentos">🚜 Equipamentos</button>
+  </nav>
+
+  <div id="mo-body">
   <nav class="tabs">
     <button data-view="dashboard" class="active">Dashboard</button>
     <button data-view="consolidado">Consolidado</button>
@@ -336,6 +399,26 @@
     </section>
 
   </main>
+  </div>
+  <!-- fim #mo-body -->
+
+  <!-- EQUIPAMENTOS (Kanban por obra) -->
+  <div id="equip-body" style="display:none;">
+    <div class="equip-toolbar">
+      <input type="text" id="eq-busca" placeholder="Buscar por tipo, marca, placa...">
+      <select id="eq-tipo"><option value="">Todos os tipos</option></select>
+      <select id="eq-situacao"><option value="">Todas as situações</option></select>
+      <div class="group-toggle">
+        <span>Agrupar por:</span>
+        <button class="gt-btn active" data-group="obra">Obra</button>
+        <button class="gt-btn" data-group="situacao">Situação</button>
+      </div>
+      <div class="spacer"></div>
+      <span class="toolbar-count" id="eq-count"></span>
+      <button class="btn btn-accent btn-sm" id="btn-add-equip">+ Equipamento</button>
+    </div>
+    <div class="kanban" id="equip-kanban"></div>
+  </div>
 
   <footer>Consolidado de Mão de Obra · dados salvos automaticamente · <span id="footer-mode">modo local</span></footer>
 </div>
@@ -428,6 +511,101 @@
     <div class="modal-foot">
       <button class="btn btn-ghost" data-close>Cancelar</button>
       <button class="btn btn-accent" id="btn-save-worker">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: EQUIPMENT FORM -->
+<div class="modal-backdrop" id="modal-equip">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="equip-modal-title">Adicionar equipamento</h2>
+      <button class="modal-close" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field full">
+          <label>Tipo *</label>
+          <input type="text" id="eqf-tipo">
+        </div>
+        <div class="field">
+          <label>Obra *</label>
+          <input type="text" id="eqf-obra" list="equip-obra-list">
+          <datalist id="equip-obra-list"></datalist>
+        </div>
+        <div class="field">
+          <label>Situação</label>
+          <select id="eqf-situacao">
+            <option>ATIVO</option>
+            <option>INATIVO</option>
+            <option>MANUTENÇÃO</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Marca</label>
+          <input type="text" id="eqf-marca">
+        </div>
+        <div class="field">
+          <label>Modelo</label>
+          <input type="text" id="eqf-modelo">
+        </div>
+        <div class="field">
+          <label>Operador</label>
+          <input type="text" id="eqf-operador">
+        </div>
+        <div class="field">
+          <label>Placa</label>
+          <input type="text" id="eqf-placa">
+        </div>
+        <div class="field">
+          <label>Proprietário / Locador</label>
+          <input type="text" id="eqf-proprietario">
+        </div>
+        <div class="field">
+          <label>Locação</label>
+          <select id="eqf-locacao">
+            <option value="">—</option>
+            <option>PRÓPRIO</option>
+            <option>LOCADO</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Valor</label>
+          <input type="text" id="eqf-valor">
+        </div>
+        <div class="field">
+          <label>Tag / Patrimônio</label>
+          <input type="text" id="eqf-tag">
+        </div>
+        <div class="field">
+          <label>Renavam</label>
+          <input type="text" id="eqf-renavam">
+        </div>
+        <div class="field">
+          <label>Chassis / Nº Série</label>
+          <input type="text" id="eqf-chassis">
+        </div>
+        <div class="field">
+          <label>Ano</label>
+          <input type="text" id="eqf-ano">
+        </div>
+        <div class="field">
+          <label>Obra (cód. SIENGE)</label>
+          <input type="text" id="eqf-sieng">
+        </div>
+        <div class="field">
+          <label>Frente de Serviço</label>
+          <input type="text" id="eqf-frente">
+        </div>
+        <div class="field full">
+          <label>Observação</label>
+          <textarea id="eqf-obs"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close>Cancelar</button>
+      <button class="btn btn-accent" id="btn-save-equip">Salvar</button>
     </div>
   </div>
 </div>
@@ -533,11 +711,12 @@ if (useFirebase) {
 }
 
 const LS_KEY = "consolidadoMaoDeObra";
-function lsRead() {
-  try { return JSON.parse(localStorage.getItem(LS_KEY)) || { colaboradores: [], obras: {}, importacoes: [] }; }
-  catch { return { colaboradores: [], obras: {}, importacoes: [] }; }
+const LS_KEY_EQUIP = "consolidadoEquipamentos";
+function lsRead(key, itemsKey) {
+  try { return JSON.parse(localStorage.getItem(key)) || { [itemsKey]: [], obras: {}, importacoes: [] }; }
+  catch { return { [itemsKey]: [], obras: {}, importacoes: [] }; }
 }
-function lsWrite(data) { localStorage.setItem(LS_KEY, JSON.stringify(data)); }
+function lsWrite(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
 
 // Evita que uma conexão travada com o Firestore (rede de escritório com
 // proxy/firewall restritivo) deixe o site preso num carregamento infinito.
@@ -552,101 +731,108 @@ function withTimeout(promiseFactory, ms = 20000) {
   ]);
 }
 
-const Store = {
-  async loadAll() {
-    if (useFirebase) {
-      return withTimeout(async () => {
-        // Sequencial (em vez de Promise.all) para não abrir várias conexões
-        // simultâneas na primeira leitura — mais robusto em redes com proxy/firewall.
-        const colSnap = await fs.getDocs(fs.collection(db, "colaboradores"));
-        const obrasSnap = await fs.getDocs(fs.collection(db, "obras"));
-        const logSnap = await fs.getDocs(fs.query(fs.collection(db, "importacoes"), fs.orderBy("timestamp", "desc")));
-        const colaboradores = colSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const obras = {};
-        obrasSnap.docs.forEach(d => obras[d.id] = d.data());
-        const importacoes = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        return { colaboradores, obras, importacoes };
-      });
-    }
-    return lsRead();
-  },
+// Fábrica de "Store": gera a camada de dados (Firestore ou localStorage) para
+// um domínio (Mão de Obra, Equipamentos, ...), todos agrupados por "obra".
+function makeStore({ itemsKey, colName, obrasColName, logColName, lsKey }) {
+  return {
+    async loadAll() {
+      if (useFirebase) {
+        return withTimeout(async () => {
+          // Sequencial (em vez de Promise.all) para não abrir várias conexões
+          // simultâneas na primeira leitura — mais robusto em redes com proxy/firewall.
+          const colSnap = await fs.getDocs(fs.collection(db, colName));
+          const obrasSnap = await fs.getDocs(fs.collection(db, obrasColName));
+          const logSnap = await fs.getDocs(fs.query(fs.collection(db, logColName), fs.orderBy("timestamp", "desc")));
+          const items = colSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          const obras = {};
+          obrasSnap.docs.forEach(d => obras[d.id] = d.data());
+          const importacoes = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          return { [itemsKey]: items, obras, importacoes };
+        });
+      }
+      return lsRead(lsKey, itemsKey);
+    },
 
-  async replaceObra(obraName, records, meta) {
-    const slug = slugify(obraName);
-    if (useFirebase) {
-      return withTimeout(async () => {
-        const existing = await fs.getDocs(fs.query(fs.collection(db, "colaboradores"), fs.where("obra", "==", obraName)));
-        const batchOps = [];
-        let batch = fs.writeBatch(db);
-        let opCount = 0;
-        for (const d of existing.docs) {
-          batch.delete(d.ref);
-          opCount++;
-          if (opCount >= 450) { batchOps.push(batch); batch = fs.writeBatch(db); opCount = 0; }
-        }
-        for (const rec of records) {
-          batch.set(fs.doc(fs.collection(db, "colaboradores")), rec);
-          opCount++;
-          if (opCount >= 450) { batchOps.push(batch); batch = fs.writeBatch(db); opCount = 0; }
-        }
-        batchOps.push(batch);
-        for (const b of batchOps) await b.commit();
-        await fs.setDoc(fs.doc(db, "obras", slug), { nome: obraName, ...meta, lastUpdated: Date.now() }, { merge: true });
-      }, 30000);
-    } else {
-      const data = lsRead();
-      data.colaboradores = data.colaboradores.filter(c => c.obra !== obraName);
-      records.forEach(r => data.colaboradores.push({ id: cryptoId(), ...r }));
-      data.obras[slug] = { nome: obraName, ...meta, lastUpdated: Date.now() };
-      lsWrite(data);
-    }
-  },
-
-  async addImportLog(entry) {
-    if (useFirebase) {
-      return withTimeout(() => fs.addDoc(fs.collection(db, "importacoes"), { ...entry, timestamp: Date.now() }));
-    } else {
-      const data = lsRead();
-      data.importacoes.unshift({ id: cryptoId(), ...entry, timestamp: Date.now() });
-      lsWrite(data);
-    }
-  },
-
-  async saveWorker(rec) {
-    if (useFirebase) {
-      return withTimeout(() => {
-        if (rec.id) {
-          const { id, ...rest } = rec;
-          return fs.setDoc(fs.doc(db, "colaboradores", id), rest, { merge: true });
-        }
-        return fs.addDoc(fs.collection(db, "colaboradores"), rec);
-      });
-    } else {
-      const data = lsRead();
-      if (rec.id) {
-        const idx = data.colaboradores.findIndex(c => c.id === rec.id);
-        if (idx >= 0) data.colaboradores[idx] = { ...data.colaboradores[idx], ...rec };
+    async replaceObra(obraName, records, meta) {
+      const slug = slugify(obraName);
+      if (useFirebase) {
+        return withTimeout(async () => {
+          const existing = await fs.getDocs(fs.query(fs.collection(db, colName), fs.where("obra", "==", obraName)));
+          const batchOps = [];
+          let batch = fs.writeBatch(db);
+          let opCount = 0;
+          for (const d of existing.docs) {
+            batch.delete(d.ref);
+            opCount++;
+            if (opCount >= 450) { batchOps.push(batch); batch = fs.writeBatch(db); opCount = 0; }
+          }
+          for (const rec of records) {
+            batch.set(fs.doc(fs.collection(db, colName)), rec);
+            opCount++;
+            if (opCount >= 450) { batchOps.push(batch); batch = fs.writeBatch(db); opCount = 0; }
+          }
+          batchOps.push(batch);
+          for (const b of batchOps) await b.commit();
+          await fs.setDoc(fs.doc(db, obrasColName, slug), { nome: obraName, ...meta, lastUpdated: Date.now() }, { merge: true });
+        }, 30000);
       } else {
-        data.colaboradores.push({ id: cryptoId(), ...rec });
+        const data = lsRead(lsKey, itemsKey);
+        data[itemsKey] = data[itemsKey].filter(c => c.obra !== obraName);
+        records.forEach(r => data[itemsKey].push({ id: cryptoId(), ...r }));
+        data.obras[slug] = { nome: obraName, ...meta, lastUpdated: Date.now() };
+        lsWrite(lsKey, data);
       }
-      if (rec.obra) {
-        const slug = slugify(rec.obra);
-        if (!data.obras[slug]) data.obras[slug] = { nome: rec.obra, lastUpdated: Date.now() };
-      }
-      lsWrite(data);
-    }
-  },
+    },
 
-  async deleteWorker(id) {
-    if (useFirebase) {
-      return withTimeout(() => fs.deleteDoc(fs.doc(db, "colaboradores", id)));
-    } else {
-      const data = lsRead();
-      data.colaboradores = data.colaboradores.filter(c => c.id !== id);
-      lsWrite(data);
+    async addImportLog(entry) {
+      if (useFirebase) {
+        return withTimeout(() => fs.addDoc(fs.collection(db, logColName), { ...entry, timestamp: Date.now() }));
+      } else {
+        const data = lsRead(lsKey, itemsKey);
+        data.importacoes.unshift({ id: cryptoId(), ...entry, timestamp: Date.now() });
+        lsWrite(lsKey, data);
+      }
+    },
+
+    async saveItem(rec) {
+      if (useFirebase) {
+        return withTimeout(() => {
+          const { id, ...rest } = rec; // Firestore rejeita campos com valor undefined (ex.: id ausente)
+          if (id) {
+            return fs.setDoc(fs.doc(db, colName, id), rest, { merge: true });
+          }
+          return fs.addDoc(fs.collection(db, colName), rest);
+        });
+      } else {
+        const data = lsRead(lsKey, itemsKey);
+        if (rec.id) {
+          const idx = data[itemsKey].findIndex(c => c.id === rec.id);
+          if (idx >= 0) data[itemsKey][idx] = { ...data[itemsKey][idx], ...rec };
+        } else {
+          data[itemsKey].push({ id: cryptoId(), ...rec });
+        }
+        if (rec.obra) {
+          const slug = slugify(rec.obra);
+          if (!data.obras[slug]) data.obras[slug] = { nome: rec.obra, lastUpdated: Date.now() };
+        }
+        lsWrite(lsKey, data);
+      }
+    },
+
+    async deleteItem(id) {
+      if (useFirebase) {
+        return withTimeout(() => fs.deleteDoc(fs.doc(db, colName, id)));
+      } else {
+        const data = lsRead(lsKey, itemsKey);
+        data[itemsKey] = data[itemsKey].filter(c => c.id !== id);
+        lsWrite(lsKey, data);
+      }
     }
-  }
-};
+  };
+}
+
+const Store = makeStore({ itemsKey: "colaboradores", colName: "colaboradores", obrasColName: "obras", logColName: "importacoes", lsKey: LS_KEY });
+const EquipStore = makeStore({ itemsKey: "equipamentos", colName: "equipamentos", obrasColName: "equipamentosObras", logColName: "equipamentosImportacoes", lsKey: LS_KEY_EQUIP });
 
 function cryptoId() { return "id-" + Math.random().toString(36).slice(2) + Date.now().toString(36); }
 function slugify(s) { return (s || "sem-obra").toString().trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "SEM-OBRA"; }
@@ -655,6 +841,9 @@ function slugify(s) { return (s || "sem-obra").toString().trim().toUpperCase().r
    ESTADO DA APLICAÇÃO
    ------------------------------------------------------------------------- */
 let STATE = { colaboradores: [], obras: {}, importacoes: [] };
+let EQUIP_STATE = { equipamentos: [], obras: {}, importacoes: [] };
+let currentModule = "maodeobra";
+let equipLoaded = false;
 
 async function reload() {
   try {
@@ -663,9 +852,23 @@ async function reload() {
     console.error("Falha ao carregar dados do Firebase:", e);
     toast("Não foi possível conectar ao Firebase (" + e.message + "). Mostrando dados salvos neste navegador.", true);
     useFirebase = false;
-    STATE = lsRead();
+    STATE = lsRead(LS_KEY, "colaboradores");
   }
   renderAll();
+}
+
+async function reloadEquip() {
+  try {
+    EQUIP_STATE = await EquipStore.loadAll();
+  } catch (e) {
+    console.error("Falha ao carregar equipamentos do Firebase:", e);
+    toast("Não foi possível conectar ao Firebase (" + e.message + "). Mostrando dados salvos neste navegador.", true);
+    useFirebase = false;
+    EQUIP_STATE = lsRead(LS_KEY_EQUIP, "equipamentos");
+  }
+  equipLoaded = true;
+  renderEquipAll();
+  updateConnStatus();
 }
 
 function renderAll() {
@@ -676,6 +879,26 @@ function renderAll() {
   renderImportacoes();
   updateConnStatus();
 }
+
+/* -------------------------------------------------------------------------
+   TROCA DE MÓDULO (Mão de Obra <-> Equipamentos)
+   ------------------------------------------------------------------------- */
+function switchModule(mod) {
+  currentModule = mod;
+  document.querySelectorAll("nav.module-tabs button").forEach(b => b.classList.toggle("active", b.dataset.module === mod));
+  const isEquip = mod === "equipamentos";
+  document.getElementById("mo-body").style.display = isEquip ? "none" : "";
+  document.getElementById("equip-body").style.display = isEquip ? "" : "none";
+  document.getElementById("btn-import").textContent = isEquip ? "Importar planilha de equipamentos" : "Importar planilha semanal";
+  document.getElementById("brand-logo").textContent = isEquip ? "EQ" : "MO";
+  document.getElementById("brand-title").textContent = isEquip ? "Controle de Equipamentos" : "Consolidado de Mão de Obra";
+  document.getElementById("brand-sub").textContent = isEquip ? "LM CONSTRUTORA — EQUIPAMENTOS POR OBRA" : "LM CONSTRUTORA — EFETIVO POR OBRA";
+  if (isEquip && !equipLoaded) reloadEquip();
+}
+
+document.querySelectorAll("nav.module-tabs button").forEach(btn => {
+  btn.addEventListener("click", () => switchModule(btn.dataset.module));
+});
 
 function updateConnStatus() {
   const pill = document.getElementById("conn-status");
@@ -885,6 +1108,225 @@ function renderImportacoes() {
 }
 
 /* -------------------------------------------------------------------------
+   EQUIPAMENTOS — QUADRO KANBAN POR OBRA
+   ------------------------------------------------------------------------- */
+let equipGroupBy = "obra";
+
+function equipStatusClass(situacao) {
+  const s = (situacao || "").toUpperCase();
+  if (s.includes("MANUTEN")) return "eq-manutencao";
+  if (s.includes("INATIVO")) return "eq-inativo";
+  if (s.includes("ATIVO")) return "eq-ativo";
+  return "eq-outro";
+}
+
+function renderEquipAll() {
+  renderEquipFilters();
+  renderEquipKanban();
+}
+
+function renderEquipFilters() {
+  const tipoSel = document.getElementById("eq-tipo");
+  const sitSel = document.getElementById("eq-situacao");
+  const obraList = document.getElementById("equip-obra-list");
+
+  const tipos = [...new Set(EQUIP_STATE.equipamentos.map(w => w.tipo).filter(Boolean))].sort();
+  const situacoes = [...new Set(EQUIP_STATE.equipamentos.map(w => w.situacao).filter(Boolean))].sort();
+  const obras = [...new Set([
+    ...EQUIP_STATE.equipamentos.map(w => w.obra),
+    ...Object.values(EQUIP_STATE.obras).map(o => o.nome)
+  ].filter(Boolean))].sort();
+
+  const keep = (sel, values, allLabel) => {
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">${allLabel}</option>` + values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+    sel.value = values.includes(cur) ? cur : "";
+  };
+  keep(tipoSel, tipos, "Todos os tipos");
+  keep(sitSel, situacoes, "Todas as situações");
+  obraList.innerHTML = obras.map(o => `<option value="${escapeHtml(o)}">`).join("");
+}
+
+function getFilteredEquip() {
+  const busca = document.getElementById("eq-busca").value.trim().toLowerCase();
+  const tipo = document.getElementById("eq-tipo").value;
+  const situacao = document.getElementById("eq-situacao").value;
+  return EQUIP_STATE.equipamentos.filter(w => {
+    if (busca) {
+      const hay = [w.tipo, w.marca, w.modelo, w.placa, w.operador].filter(Boolean).join(" ").toLowerCase();
+      if (!hay.includes(busca)) return false;
+    }
+    if (tipo && w.tipo !== tipo) return false;
+    if (situacao && w.situacao !== situacao) return false;
+    return true;
+  });
+}
+
+const EQUIP_SITUACAO_ORDER = ["ATIVO", "MANUTENÇÃO", "INATIVO"];
+
+function renderEquipKanban() {
+  const list = getFilteredEquip();
+  document.getElementById("eq-count").textContent = `${list.length} de ${EQUIP_STATE.equipamentos.length} equipamento(s)`;
+
+  const groups = {};
+  if (equipGroupBy === "situacao") {
+    EQUIP_SITUACAO_ORDER.forEach(s => groups[s] = []);
+    list.forEach(w => { const k = w.situacao || "SEM SITUAÇÃO"; (groups[k] ||= []).push(w); });
+  } else {
+    Object.values(EQUIP_STATE.obras).forEach(o => groups[o.nome] = []);
+    list.forEach(w => { const k = w.obra || "SEM OBRA"; (groups[k] ||= []).push(w); });
+  }
+
+  let keys = Object.keys(groups);
+  if (equipGroupBy === "situacao") {
+    keys = [...EQUIP_SITUACAO_ORDER.filter(s => keys.includes(s)), ...keys.filter(k => !EQUIP_SITUACAO_ORDER.includes(k)).sort()];
+  } else {
+    keys.sort((a, b) => a.localeCompare(b));
+  }
+
+  const board = document.getElementById("equip-kanban");
+  if (!keys.length) {
+    board.innerHTML = `<div class="empty-state">Nenhum equipamento cadastrado ainda. Importe a planilha semanal ou adicione manualmente.</div>`;
+    return;
+  }
+
+  board.innerHTML = keys.map(k => {
+    const items = groups[k].slice().sort((a, b) => (a.tipo || "").localeCompare(b.tipo || ""));
+    return `
+      <div class="kanban-col">
+        <div class="kanban-col-head"><h3>${escapeHtml(k)}</h3><span class="kc-count">${items.length}</span></div>
+        <div class="kanban-col-body" data-group="${escapeHtml(k)}">
+          ${items.map(w => `
+            <div class="kanban-card" draggable="true" data-id="${w.id}">
+              <div style="display:flex;justify-content:space-between;gap:6px;">
+                <div class="kc-tipo">${escapeHtml(w.tipo)}</div>
+                <button class="icon-btn del" data-del="${w.id}" title="Excluir" style="width:20px;height:20px;flex-shrink:0;">✕</button>
+              </div>
+              <div class="kc-marca">${escapeHtml([w.marca, w.modelo].filter(Boolean).join(" ")) || "—"}</div>
+              <div class="kc-meta">
+                <span class="badge ${equipStatusClass(w.situacao)}">${escapeHtml(w.situacao || "—")}</span>
+                ${w.placa ? `<span class="kc-tag">${escapeHtml(w.placa)}</span>` : ""}
+                ${w.operador ? `<span class="kc-tag">${escapeHtml(w.operador)}</span>` : ""}
+              </div>
+            </div>
+          `).join("") || `<div class="empty-state" style="padding:24px 10px;font-size:.72rem;">Vazio</div>`}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  wireEquipDragDrop();
+}
+
+function wireEquipDragDrop() {
+  document.querySelectorAll(".kanban-card").forEach(card => {
+    card.addEventListener("dragstart", (e) => {
+      card.classList.add("dragging");
+      e.dataTransfer.setData("text/plain", card.dataset.id);
+    });
+    card.addEventListener("dragend", () => card.classList.remove("dragging"));
+    card.addEventListener("click", (e) => {
+      if (e.target.closest("[data-del]")) return;
+      const item = EQUIP_STATE.equipamentos.find(w => w.id === card.dataset.id);
+      if (item) openEquipModal(item);
+    });
+  });
+  document.querySelectorAll(".kanban-card [data-del]").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm("Excluir este equipamento do consolidado?")) return;
+      await EquipStore.deleteItem(btn.dataset.del);
+      toast("Equipamento removido.");
+      await reloadEquip();
+    });
+  });
+  document.querySelectorAll(".kanban-col-body").forEach(col => {
+    col.addEventListener("dragover", (e) => { e.preventDefault(); col.closest(".kanban-col").classList.add("drag-over"); });
+    col.addEventListener("dragleave", () => col.closest(".kanban-col").classList.remove("drag-over"));
+    col.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      col.closest(".kanban-col").classList.remove("drag-over");
+      const id = e.dataTransfer.getData("text/plain");
+      const group = col.dataset.group;
+      const item = EQUIP_STATE.equipamentos.find(w => w.id === id);
+      if (!item) return;
+      if (equipGroupBy === "situacao") {
+        if (item.situacao === group) return;
+        item.situacao = group;
+      } else {
+        if (item.obra === group) return;
+        item.obra = group;
+      }
+      renderEquipKanban();
+      try {
+        await EquipStore.saveItem(item);
+      } catch (err) {
+        toast("Erro ao salvar: " + err.message, true);
+        await reloadEquip();
+      }
+    });
+  });
+}
+
+document.querySelectorAll(".group-toggle .gt-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".group-toggle .gt-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    equipGroupBy = btn.dataset.group;
+    renderEquipKanban();
+  });
+});
+
+["eq-busca", "eq-tipo", "eq-situacao"].forEach(id => {
+  document.getElementById(id).addEventListener("input", renderEquipKanban);
+  document.getElementById(id).addEventListener("change", renderEquipKanban);
+});
+
+function openEquipModal(item) {
+  document.getElementById("equip-modal-title").textContent = item ? "Editar equipamento" : "Adicionar equipamento";
+  const f = id => document.getElementById(id);
+  f("eqf-tipo").value = item?.tipo || "";
+  f("eqf-obra").value = item?.obra || "";
+  f("eqf-situacao").value = ["ATIVO", "INATIVO", "MANUTENÇÃO"].includes(item?.situacao) ? item.situacao : "ATIVO";
+  f("eqf-marca").value = item?.marca || "";
+  f("eqf-modelo").value = item?.modelo || "";
+  f("eqf-operador").value = item?.operador || "";
+  f("eqf-placa").value = item?.placa || "";
+  f("eqf-proprietario").value = item?.proprietario || "";
+  f("eqf-locacao").value = ["PRÓPRIO", "LOCADO"].includes(item?.locacao) ? item.locacao : "";
+  f("eqf-valor").value = item?.valor || "";
+  f("eqf-tag").value = item?.tag || "";
+  f("eqf-renavam").value = item?.renavam || "";
+  f("eqf-chassis").value = item?.chassis || "";
+  f("eqf-ano").value = item?.ano || "";
+  f("eqf-sieng").value = item?.sieng || "";
+  f("eqf-frente").value = item?.frente || "";
+  f("eqf-obs").value = item?.obs || "";
+  document.getElementById("modal-equip").dataset.editId = item?.id || "";
+  document.getElementById("modal-equip").classList.add("open");
+}
+
+document.getElementById("btn-add-equip").addEventListener("click", () => openEquipModal(null));
+
+document.getElementById("btn-save-equip").addEventListener("click", async () => {
+  const f = id => document.getElementById(id).value.trim();
+  const tipo = f("eqf-tipo"), obra = f("eqf-obra");
+  if (!tipo || !obra) { toast("Preencha ao menos Tipo e Obra.", true); return; }
+  const editId = document.getElementById("modal-equip").dataset.editId;
+  const rec = {
+    id: editId || undefined,
+    tipo, obra, situacao: f("eqf-situacao"), marca: f("eqf-marca"), modelo: f("eqf-modelo"),
+    operador: f("eqf-operador"), placa: f("eqf-placa"), proprietario: f("eqf-proprietario"),
+    locacao: f("eqf-locacao"), valor: f("eqf-valor"), tag: f("eqf-tag"), renavam: f("eqf-renavam"),
+    chassis: f("eqf-chassis"), ano: f("eqf-ano"), sieng: f("eqf-sieng"), frente: f("eqf-frente"), obs: f("eqf-obs")
+  };
+  await EquipStore.saveItem(rec);
+  closeModals();
+  toast(editId ? "Equipamento atualizado." : "Equipamento adicionado.");
+  await reloadEquip();
+});
+
+/* -------------------------------------------------------------------------
    IMPORTAÇÃO DE PLANILHA (.xlsx / .xls / .csv)
    ------------------------------------------------------------------------- */
 const HEADER_MAP = [
@@ -900,6 +1342,92 @@ const HEADER_MAP = [
   { key: "status",     match: h => h.includes("STATUS") },
   { key: "obs",        match: h => h.includes("OBSERVA") },
 ];
+
+const EQUIP_HEADER_MAP = [
+  { key: "obra",         match: h => h === "OBRA" },
+  { key: "tipo",         match: h => h.includes("TIPO") },
+  { key: "operador",     match: h => h.includes("OPERADOR") },
+  { key: "marca",        match: h => h.includes("MARCA") },
+  { key: "modelo",       match: h => h.includes("MODELO") },
+  { key: "proprietario", match: h => h.includes("PROPRIET") || h.includes("LOCADOR") },
+  { key: "locacao",      match: h => h.trim() === "LOCAÇÃO" || h.trim() === "LOCACAO" },
+  { key: "valor",        match: h => h === "VALOR" },
+  { key: "tag",          match: h => h.includes("TAG") || h.includes("PATRIM") },
+  { key: "renavam",      match: h => h.includes("RENAVAM") },
+  { key: "chassis",      match: h => h.includes("CHASSIS") },
+  { key: "ano",          match: h => h.includes("ANO") },
+  { key: "placa",        match: h => h.includes("PLACA") },
+  { key: "situacao",     match: h => h.includes("SITUA") },
+  { key: "sieng",        match: h => h.includes("SIENG") },
+  { key: "frente",       match: h => h.includes("FRENTE") },
+  { key: "obs",          match: h => h.includes("OBSERVA") || h === "OBS." },
+];
+
+function findEquipHeaderRow(rows) {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const norm = row.map(c => (c ?? "").toString().trim().toUpperCase());
+    const hasObra = norm.some(c => c === "OBRA");
+    const hasTipo = norm.some(c => c.includes("TIPO"));
+    const hasSituacao = norm.some(c => c.includes("SITUA"));
+    if (hasObra && hasTipo && hasSituacao) return i;
+  }
+  return -1;
+}
+
+function buildEquipColumnIndex(headerRow) {
+  const norm = headerRow.map(c => (c ?? "").toString().trim().toUpperCase());
+  const idx = {};
+  for (const { key, match } of EQUIP_HEADER_MAP) {
+    let found = norm.findIndex(h => h === key.toUpperCase());
+    if (found === -1) found = norm.findIndex(match);
+    if (found !== -1) idx[key] = found;
+  }
+  return idx;
+}
+
+function parseEquipSheetRows(rows) {
+  const headerIdx = findEquipHeaderRow(rows);
+  if (headerIdx === -1) return null;
+  const colIdx = buildEquipColumnIndex(rows[headerIdx]);
+  if (colIdx.obra === undefined || colIdx.tipo === undefined) return null;
+
+  const byObra = {};
+  let currentObra = "";
+  const fieldKeys = EQUIP_HEADER_MAP.map(h => h.key);
+
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const get = k => (colIdx[k] !== undefined ? formatCell(row[colIdx[k]]) : "");
+    const obraVal = get("obra");
+    const tipoVal = get("tipo");
+
+    if (!obraVal && !tipoVal && row.every(c => !formatCell(c))) continue; // linha em branco
+
+    if (obraVal.toUpperCase().startsWith("TOTAL")) continue; // linha de total, ignorar
+
+    if (!obraVal && !tipoVal) {
+      // cabeçalho de seção = nome da obra (fica no primeiro campo mapeado preenchido)
+      const anyVal = fieldKeys.map(k => get(k)).find(v => v);
+      if (anyVal) currentObra = anyVal;
+      continue;
+    }
+
+    if (!tipoVal) continue; // sem tipo não é um equipamento válido
+
+    const obra = obraVal || currentObra || "SEM OBRA";
+    if (!byObra[obra]) byObra[obra] = [];
+    byObra[obra].push({
+      obra, tipo: tipoVal, operador: get("operador"), marca: get("marca"), modelo: get("modelo"),
+      proprietario: get("proprietario"), locacao: get("locacao"), valor: get("valor"),
+      tag: get("tag"), renavam: get("renavam"), chassis: get("chassis"), ano: get("ano"),
+      placa: get("placa"), situacao: get("situacao") || "ATIVO", sieng: get("sieng"),
+      frente: get("frente"), obs: get("obs")
+    });
+  }
+
+  return byObra;
+}
 
 let pendingImport = null;
 
@@ -1011,15 +1539,17 @@ document.getElementById("file-input").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   e.target.value = "";
   if (!file) return;
+  const isEquip = currentModule === "equipamentos";
   try {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array" });
+    const parseFn = isEquip ? parseEquipSheetRows : parseSheetRows;
 
     let best = null;
     for (const sheetName of wb.SheetNames) {
       const ws = wb.Sheets[sheetName];
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true });
-      const parsed = parseSheetRows(rows);
+      const parsed = parseFn(rows);
       if (parsed && Object.keys(parsed).length) {
         const total = Object.values(parsed).flat().length;
         if (!best || total > best.total) best = { sheetName, parsed, total };
@@ -1027,11 +1557,14 @@ document.getElementById("file-input").addEventListener("change", async (e) => {
     }
 
     if (!best) {
-      toast("Não foi possível identificar a tabela de mão de obra nesse arquivo. Verifique se a planilha segue o padrão (colunas COD., OBRA, FUNÇÃO, NOME...).", true);
+      const msg = isEquip
+        ? "Não foi possível identificar a tabela de equipamentos nesse arquivo. Verifique se a planilha segue o padrão (colunas OBRA, TIPO, SITUAÇÃO...)."
+        : "Não foi possível identificar a tabela de mão de obra nesse arquivo. Verifique se a planilha segue o padrão (colunas COD., OBRA, FUNÇÃO, NOME...).";
+      toast(msg, true);
       return;
     }
 
-    pendingImport = { fileName: file.name, sheetName: best.sheetName, byObra: best.parsed };
+    pendingImport = { domain: currentModule, fileName: file.name, sheetName: best.sheetName, byObra: best.parsed };
     openImportPreview();
   } catch (err) {
     console.error(err);
@@ -1043,9 +1576,10 @@ function openImportPreview() {
   const body = document.getElementById("import-preview-body");
   const entries = Object.entries(pendingImport.byObra);
   const total = entries.reduce((s, [, list]) => s + list.length, 0);
+  const unit = pendingImport.domain === "equipamentos" ? "equipamento(s)" : "colaborador(es)";
   body.innerHTML = `
     <div class="import-warn">Isso vai substituir os dados atuais das obras listadas abaixo pelos dados dessa planilha. Obras não listadas aqui permanecem como estão.</div>
-    ${entries.map(([obra, list]) => `<div class="obra-line"><span>${escapeHtml(obra)}</span><span class="n">${list.length} colaborador(es)</span></div>`).join("")}
+    ${entries.map(([obra, list]) => `<div class="obra-line"><span>${escapeHtml(obra)}</span><span class="n">${list.length} ${unit}</span></div>`).join("")}
     <div class="obra-line" style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px;"><strong>Total</strong><strong class="n">${total}</strong></div>
   `;
   document.getElementById("modal-import").classList.add("open");
@@ -1054,20 +1588,23 @@ function openImportPreview() {
 document.getElementById("btn-confirm-import").addEventListener("click", async () => {
   if (!pendingImport) return;
   const btn = document.getElementById("btn-confirm-import");
+  const isEquip = pendingImport.domain === "equipamentos";
+  const targetStore = isEquip ? EquipStore : Store;
+  const unit = isEquip ? "equipamento(s)" : "colaborador(es)";
   btn.disabled = true; btn.textContent = "Importando...";
   try {
     const entries = Object.entries(pendingImport.byObra);
     for (const [obra, list] of entries) {
-      await Store.replaceObra(obra, list, {});
+      await targetStore.replaceObra(obra, list, {});
     }
-    await Store.addImportLog({
+    await targetStore.addImportLog({
       fileName: pendingImport.fileName,
       obras: entries.map(([o]) => o),
       totalRegistros: entries.reduce((s, [, l]) => s + l.length, 0)
     });
     closeModals();
-    toast(`Importação concluída: ${entries.length} obra(s) atualizadas.`);
-    await reload();
+    toast(`Importação concluída: ${entries.length} obra(s) atualizadas (${entries.reduce((s, [, l]) => s + l.length, 0)} ${unit}).`);
+    if (isEquip) await reloadEquip(); else await reload();
   } catch (err) {
     console.error(err);
     toast("Erro ao salvar importação: " + err.message, true);
@@ -1082,6 +1619,22 @@ document.getElementById("btn-confirm-import").addEventListener("click", async ()
    ------------------------------------------------------------------------- */
 document.getElementById("btn-export").addEventListener("click", () => {
   if (!requireUnlock()) return;
+  if (currentModule === "equipamentos") {
+    const rows = [["OBRA","TIPO","OPERADOR","MARCA","MODELO","PROPRIETÁRIO/LOCADOR","LOCAÇÃO","VALOR","TAG/PATRIMONIO","RENAVAM","CHASSIS/N.º SERIE","ANO","PLACA","SITUAÇÃO","OBRA (COD. SIENGE)","FRENTE SERVIÇO","OBS."]];
+    const byObra = {};
+    EQUIP_STATE.equipamentos.forEach(w => { (byObra[w.obra || "SEM OBRA"] ||= []).push(w); });
+    Object.entries(byObra).sort(([a],[b]) => a.localeCompare(b)).forEach(([obra, list]) => {
+      rows.push([obra]);
+      list.forEach(w => rows.push([w.obra||"", w.tipo||"", w.operador||"", w.marca||"", w.modelo||"", w.proprietario||"", w.locacao||"", w.valor||"", w.tag||"", w.renavam||"", w.chassis||"", w.ano||"", w.placa||"", w.situacao||"", w.sieng||"", w.frente||"", w.obs||""]));
+      rows.push(["TOTAL " + obra, list.length]);
+      rows.push([]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Equipamentos");
+    XLSX.writeFile(wb, `consolidado-equipamentos-${new Date().toISOString().slice(0,10)}.xlsx`);
+    return;
+  }
   const rows = [["COD.","OBRA","FUNÇÃO","NÍVEL","NOME","ADMISSÃO","TIPO / FORNECEDOR","OBRA (COD. SIENG)","FRENTE SERVIÇO","STATUS","OBSERVAÇÃO"]];
   const byObra = {};
   STATE.colaboradores.forEach(w => { (byObra[w.obra || "SEM OBRA"] ||= []).push(w); });
@@ -1132,7 +1685,7 @@ document.getElementById("btn-save-worker").addEventListener("click", async () =>
     cod: f("w-cod"), admissao: f("w-admissao"), fornecedor: f("w-fornecedor"),
     sieng: f("w-sieng"), frente: f("w-frente"), status: f("w-status"), obs: f("w-obs")
   };
-  await Store.saveWorker(rec);
+  await Store.saveItem(rec);
   closeModals();
   toast(editId ? "Colaborador atualizado." : "Colaborador adicionado.");
   await reload();
@@ -1146,7 +1699,7 @@ document.getElementById("cons-table").addEventListener("click", async (e) => {
     if (worker) openWorkerModal(worker);
   } else if (delId) {
     if (confirm("Excluir este colaborador do consolidado?")) {
-      await Store.deleteWorker(delId);
+      await Store.deleteItem(delId);
       toast("Colaborador removido.");
       await reload();
     }
