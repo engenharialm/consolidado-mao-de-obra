@@ -94,6 +94,8 @@
   main{flex:1;padding:24px 28px 60px;max-width:1400px;width:100%;margin:0 auto;}
   .view{display:none;}
   .view.active{display:block;}
+  .eview{display:none;}
+  .eview.active{display:block;}
 
   .cards-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:22px;}
   .card{
@@ -196,11 +198,12 @@
   .equip-toolbar select{cursor:pointer;}
   .equip-toolbar .spacer{flex:1;}
   .group-toggle{display:flex;align-items:center;gap:8px;font-size:.76rem;color:var(--text-dim);}
-  .group-toggle .gt-btn{
+  #equip-categoria-pills{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .gt-btn{
     background:var(--bg);border:1px solid var(--border);color:var(--text-dim);
     padding:7px 12px;border-radius:7px;font-family:inherit;font-size:.76rem;font-weight:600;cursor:pointer;
   }
-  .group-toggle .gt-btn.active{background:var(--accent);color:#FFFFFF;border-color:var(--accent);}
+  .gt-btn.active{background:var(--accent);color:#FFFFFF;border-color:var(--accent);}
 
   .kanban{display:flex;gap:14px;padding:20px 28px 40px;overflow-x:auto;align-items:flex-start;}
   .kanban-col{
@@ -416,22 +419,76 @@
   </div>
   <!-- fim #mo-body -->
 
-  <!-- EQUIPAMENTOS (Kanban por obra) -->
+  <!-- EQUIPAMENTOS -->
   <div id="equip-body" style="display:none;">
-    <div class="equip-toolbar">
+    <nav class="tabs">
+      <button data-eview="quadro" class="active">Quadro</button>
+      <button data-eview="lista">Lista Mestre</button>
+      <button data-eview="relatorio">Relatório</button>
+    </nav>
+
+    <div class="equip-toolbar" id="equip-shared-toolbar">
       <input type="text" id="eq-busca" placeholder="Buscar por tipo, marca, placa...">
-      <select id="eq-tipo"><option value="">Todos os tipos</option></select>
+      <select id="eq-obra"><option value="">Todas as obras</option></select>
       <select id="eq-situacao"><option value="">Todas as situações</option></select>
-      <div class="group-toggle">
-        <span>Agrupar por:</span>
-        <button class="gt-btn active" data-group="obra">Obra</button>
-        <button class="gt-btn" data-group="situacao">Situação</button>
-      </div>
       <div class="spacer"></div>
       <span class="toolbar-count" id="eq-count"></span>
-      <button class="btn btn-accent btn-sm" id="btn-add-equip">+ Equipamento</button>
+      <button class="btn btn-accent btn-sm" id="btn-add-equip">+ Novo equipamento</button>
     </div>
-    <div class="kanban" id="equip-kanban"></div>
+    <div class="equip-toolbar" id="equip-categoria-pills" style="padding-top:0;">
+      <span style="font-size:.76rem;color:var(--text-dim);">Categoria:</span>
+    </div>
+
+    <section class="eview active" id="equip-view-quadro">
+      <div class="equip-toolbar" style="border-bottom:none;padding-top:4px;">
+        <div class="group-toggle">
+          <span>Agrupar por:</span>
+          <button class="gt-btn active" data-group="obra">Obra</button>
+          <button class="gt-btn" data-group="situacao">Situação</button>
+        </div>
+      </div>
+      <div class="kanban" id="equip-kanban"></div>
+    </section>
+
+    <section class="eview" id="equip-view-lista">
+      <div class="panel table-wrap" style="margin:16px 28px;">
+        <table>
+          <thead><tr>
+            <th>Equipamento</th><th>Código</th><th>Categoria</th><th>Status</th>
+            <th>Propriedade</th><th>Obra</th><th>Horímetro</th><th>Alerta</th><th>Observações</th><th></th>
+          </tr></thead>
+          <tbody id="equip-lista-table"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="eview" id="equip-view-relatorio">
+      <main style="padding:24px 28px 60px;max-width:1400px;width:100%;margin:0 auto;">
+        <div class="cards-row" style="grid-template-columns:repeat(3,1fr);">
+          <div class="card"><div class="label">Total</div><div class="value accent" id="rel-total">0</div><div class="sub">equipamentos cadastrados</div></div>
+          <div class="card"><div class="label">Ativos</div><div class="value" id="rel-ativos">0</div><div class="sub">em operação nas obras</div></div>
+          <div class="card"><div class="label">Em manutenção</div><div class="value" style="color:var(--warning);" id="rel-manutencao">0</div><div class="sub">fora de operação</div></div>
+        </div>
+
+        <div class="section-title">Equipamentos por obra
+          <button class="btn btn-accent btn-sm" id="btn-export-relatorio">Exportar Excel</button>
+        </div>
+        <div class="panel table-wrap">
+          <table>
+            <thead><tr><th>Obra</th><th>Ativo</th><th>Manutenção</th><th>Inativo</th><th>Total</th></tr></thead>
+            <tbody id="rel-por-obra"></tbody>
+          </table>
+        </div>
+
+        <div class="section-title">Equipamentos por categoria</div>
+        <div class="panel table-wrap">
+          <table>
+            <thead><tr><th>Categoria</th><th>Total</th></tr></thead>
+            <tbody id="rel-por-categoria"></tbody>
+          </table>
+        </div>
+      </main>
+    </section>
   </div>
 
   <footer>Consolidado de Mão de Obra · dados salvos automaticamente · <span id="footer-mode">modo local</span></footer>
@@ -1158,17 +1215,53 @@ function equipStatusClass(situacao) {
   return "eq-outro";
 }
 
+function equipPropriedadeLabel(locacao) {
+  const l = (locacao || "").toUpperCase();
+  if (l.includes("PRÓPRIO") || l.includes("PROPRIO")) return "Próprio";
+  if (l.includes("LOCADO")) return "Alugado";
+  return "—";
+}
+
+const EQUIP_CATEGORIAS = ["Pavimentação", "Compactação", "Terraplanagem", "Transporte", "Agrícola", "Geradores"];
+
+function inferCategoriaEquip(tipo) {
+  const t = (tipo || "").toUpperCase();
+  if (/FRESADORA|VIBROACABADORA|ESPARGIDOR|ACABADORA/.test(t)) return "Pavimentação";
+  if (/ROLO|COMPACTADOR/.test(t)) return "Compactação";
+  if (/TRATOR AGR[IÍ]COLA/.test(t)) return "Agrícola";
+  if (/GERADOR/.test(t)) return "Geradores";
+  if (/CARREGADEIRA|ESCAVADEIRA|MOTONIVELADORA|RETROESCAVADEIRA|TRATOR ESTEIRA|GRADE/.test(t)) return "Terraplanagem";
+  if (/CAMINH|VE[IÍ]CULO|ÔNIBUS|ONIBUS/.test(t)) return "Transporte";
+  return "Outros";
+}
+
+let equipSubView = "quadro";
+let equipCategoriaFiltro = "";
+
+function switchEquipSubView(view) {
+  equipSubView = view;
+  document.querySelectorAll('#equip-body nav.tabs button').forEach(b => b.classList.toggle("active", b.dataset.eview === view));
+  document.querySelectorAll('#equip-body .eview').forEach(v => v.classList.toggle("active", v.id === "equip-view-" + view));
+  document.getElementById("equip-shared-toolbar").style.display = view === "relatorio" ? "none" : "";
+  document.getElementById("equip-categoria-pills").style.display = view === "relatorio" ? "none" : "";
+  if (view === "relatorio") renderEquipRelatorio();
+}
+document.querySelectorAll('#equip-body nav.tabs button').forEach(btn => {
+  btn.addEventListener("click", () => switchEquipSubView(btn.dataset.eview));
+});
+
 function renderEquipAll() {
   renderEquipFilters();
   renderEquipKanban();
+  renderEquipListaMestre();
+  if (equipSubView === "relatorio") renderEquipRelatorio();
 }
 
 function renderEquipFilters() {
-  const tipoSel = document.getElementById("eq-tipo");
+  const obraSel = document.getElementById("eq-obra");
   const sitSel = document.getElementById("eq-situacao");
   const obraList = document.getElementById("equip-obra-list");
 
-  const tipos = [...new Set(EQUIP_STATE.equipamentos.map(w => w.tipo).filter(Boolean))].sort();
   const situacoes = [...new Set(EQUIP_STATE.equipamentos.map(w => w.situacao).filter(Boolean))].sort();
   const obras = [...new Set([
     ...EQUIP_STATE.equipamentos.map(w => w.obra),
@@ -1180,22 +1273,35 @@ function renderEquipFilters() {
     sel.innerHTML = `<option value="">${allLabel}</option>` + values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
     sel.value = values.includes(cur) ? cur : "";
   };
-  keep(tipoSel, tipos, "Todos os tipos");
+  keep(obraSel, obras, "Todas as obras");
   keep(sitSel, situacoes, "Todas as situações");
   obraList.innerHTML = obras.map(o => `<option value="${escapeHtml(o)}">`).join("");
+
+  const pillsBox = document.getElementById("equip-categoria-pills");
+  pillsBox.innerHTML = `<span style="font-size:.76rem;color:var(--text-dim);">Categoria:</span>` +
+    EQUIP_CATEGORIAS.map(c => `<button type="button" class="gt-btn eq-cat-pill${equipCategoriaFiltro === c ? " active" : ""}" data-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join("");
+  pillsBox.querySelectorAll(".eq-cat-pill").forEach(btn => {
+    btn.addEventListener("click", () => {
+      equipCategoriaFiltro = equipCategoriaFiltro === btn.dataset.cat ? "" : btn.dataset.cat;
+      renderEquipFilters();
+      renderEquipKanban();
+      renderEquipListaMestre();
+    });
+  });
 }
 
 function getFilteredEquip() {
   const busca = document.getElementById("eq-busca").value.trim().toLowerCase();
-  const tipo = document.getElementById("eq-tipo").value;
+  const obra = document.getElementById("eq-obra").value;
   const situacao = document.getElementById("eq-situacao").value;
   return EQUIP_STATE.equipamentos.filter(w => {
     if (busca) {
-      const hay = [w.tipo, w.marca, w.modelo, w.placa, w.operador].filter(Boolean).join(" ").toLowerCase();
+      const hay = [w.tipo, w.marca, w.modelo, w.placa, w.tag].filter(Boolean).join(" ").toLowerCase();
       if (!hay.includes(busca)) return false;
     }
-    if (tipo && w.tipo !== tipo) return false;
+    if (obra && w.obra !== obra) return false;
     if (situacao && w.situacao !== situacao) return false;
+    if (equipCategoriaFiltro && inferCategoriaEquip(w.tipo) !== equipCategoriaFiltro) return false;
     return true;
   });
 }
@@ -1259,7 +1365,7 @@ function renderEquipKanban() {
               <div class="kc-meta">
                 <span class="badge ${equipStatusClass(w.situacao)}">${escapeHtml(w.situacao || "—")}</span>
                 ${w.placa ? `<span class="kc-tag">${escapeHtml(w.placa)}</span>` : ""}
-                ${w.operador ? `<span class="kc-tag">${escapeHtml(w.operador)}</span>` : ""}
+                ${w.locacao ? `<span class="kc-tag">${escapeHtml(equipPropriedadeLabel(w.locacao))}</span>` : ""}
               </div>
               ${w.horimetroAtual ? `<div class="kc-horimetro ${equipHorimetroAlert(w) ? "alert" : ""}">⏱ Horímetro: ${escapeHtml(w.horimetroAtual)}${w.horimetroManutencao ? " / " + escapeHtml(w.horimetroManutencao) : ""} h</div>` : ""}
               ${w.situacao === "MANUTENÇÃO" && (w.motivoManutencao || w.previsaoDevolucao) ? `<div class="kc-manut-info">${escapeHtml(w.motivoManutencao || "")}${w.motivoManutencao && w.previsaoDevolucao ? " · " : ""}${w.previsaoDevolucao ? "volta em " + escapeHtml(w.previsaoDevolucao) : ""}</div>` : ""}
@@ -1332,10 +1438,90 @@ document.querySelectorAll(".group-toggle .gt-btn").forEach(btn => {
   });
 });
 
-["eq-busca", "eq-tipo", "eq-situacao"].forEach(id => {
-  document.getElementById(id).addEventListener("input", renderEquipKanban);
-  document.getElementById(id).addEventListener("change", renderEquipKanban);
+["eq-busca", "eq-obra", "eq-situacao"].forEach(id => {
+  document.getElementById(id).addEventListener("input", () => { renderEquipKanban(); renderEquipListaMestre(); });
+  document.getElementById(id).addEventListener("change", () => { renderEquipKanban(); renderEquipListaMestre(); });
 });
+
+/* -------------------------------------------------------------------------
+   EQUIPAMENTOS — LISTA MESTRE (tabela)
+   ------------------------------------------------------------------------- */
+function renderEquipListaMestre() {
+  const list = getFilteredEquip().slice().sort((a, b) => (a.tipo || "").localeCompare(b.tipo || ""));
+  document.getElementById("eq-count").textContent = `${list.length} de ${EQUIP_STATE.equipamentos.length} equipamento(s)`;
+  const rows = list.map(w => `
+    <tr>
+      <td><strong>${escapeHtml(w.tipo)}</strong><div class="muted" style="font-size:.72rem;">${escapeHtml([w.marca, w.modelo].filter(Boolean).join(" ")) || "—"}</div></td>
+      <td class="muted">${escapeHtml((w.tag && w.tag !== "-" ? w.tag : w.placa) || "—")}</td>
+      <td class="muted">${escapeHtml(inferCategoriaEquip(w.tipo))}</td>
+      <td><span class="badge ${equipStatusClass(w.situacao)}">${escapeHtml(w.situacao || "—")}</span></td>
+      <td class="muted">${equipPropriedadeLabel(w.locacao)}</td>
+      <td><span class="obra-tag">${escapeHtml(w.obra || "—")}</span></td>
+      <td class="muted">${w.horimetroAtual ? escapeHtml(w.horimetroAtual) + " h" : "—"}</td>
+      <td>${equipHorimetroAlert(w) ? `<span class="badge eq-manutencao">⚠ Manutenção próxima</span>` : `<span class="muted">—</span>`}</td>
+      <td class="muted" style="max-width:200px;white-space:normal;">${escapeHtml(w.obs || "—")}</td>
+      <td>
+        <div class="row-actions">
+          <button class="icon-btn" title="Editar" data-edit-eq="${w.id}">✎</button>
+          <button class="icon-btn del" title="Excluir" data-del-eq="${w.id}">✕</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+  document.getElementById("equip-lista-table").innerHTML = rows || `<tr><td colspan="10" class="empty-state">Nenhum equipamento encontrado.</td></tr>`;
+}
+
+document.getElementById("equip-lista-table").addEventListener("click", async (e) => {
+  const editId = e.target.dataset.editEq;
+  const delId = e.target.dataset.delEq;
+  if (editId) {
+    const item = EQUIP_STATE.equipamentos.find(w => w.id === editId);
+    if (item) openEquipModal(item);
+  } else if (delId) {
+    if (confirm("Excluir este equipamento do consolidado?")) {
+      await EquipStore.deleteItem(delId);
+      toast("Equipamento removido.");
+      await reloadEquip();
+    }
+  }
+});
+
+/* -------------------------------------------------------------------------
+   EQUIPAMENTOS — RELATÓRIO
+   ------------------------------------------------------------------------- */
+function renderEquipRelatorio() {
+  const all = EQUIP_STATE.equipamentos;
+  document.getElementById("rel-total").textContent = all.length;
+  document.getElementById("rel-ativos").textContent = all.filter(w => equipStatusClass(w.situacao) === "eq-ativo").length;
+  document.getElementById("rel-manutencao").textContent = all.filter(w => equipStatusClass(w.situacao) === "eq-manutencao").length;
+
+  const porObra = {};
+  Object.values(EQUIP_STATE.obras).forEach(o => porObra[o.nome] = { ativo: 0, manutencao: 0, inativo: 0, total: 0 });
+  all.forEach(w => {
+    const k = w.obra || "SEM OBRA";
+    porObra[k] ||= { ativo: 0, manutencao: 0, inativo: 0, total: 0 };
+    const cls = equipStatusClass(w.situacao);
+    if (cls === "eq-ativo") porObra[k].ativo++;
+    else if (cls === "eq-manutencao") porObra[k].manutencao++;
+    else if (cls === "eq-inativo") porObra[k].inativo++;
+    porObra[k].total++;
+  });
+  document.getElementById("rel-por-obra").innerHTML = Object.entries(porObra)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([obra, c]) => `<tr><td><span class="obra-tag">${escapeHtml(obra)}</span></td><td>${c.ativo}</td><td>${c.manutencao}</td><td>${c.inativo}</td><td><strong>${c.total}</strong></td></tr>`)
+    .join("") || `<tr><td colspan="5" class="empty-state">Sem dados ainda.</td></tr>`;
+
+  const porCategoria = {};
+  EQUIP_CATEGORIAS.concat(["Outros"]).forEach(c => porCategoria[c] = 0);
+  all.forEach(w => { const c = inferCategoriaEquip(w.tipo); porCategoria[c] = (porCategoria[c] || 0) + 1; });
+  document.getElementById("rel-por-categoria").innerHTML = Object.entries(porCategoria)
+    .filter(([, n]) => n > 0)
+    .sort(([, a], [, b]) => b - a)
+    .map(([cat, n]) => `<tr><td>${escapeHtml(cat)}</td><td><strong>${n}</strong></td></tr>`)
+    .join("") || `<tr><td colspan="2" class="empty-state">Sem dados ainda.</td></tr>`;
+}
+
+document.getElementById("btn-export-relatorio").addEventListener("click", () => document.getElementById("btn-export").click());
 
 function toggleEquipManutencaoBox() {
   const isManutencao = document.getElementById("eqf-situacao").value === "MANUTENÇÃO";
@@ -1819,9 +2005,9 @@ document.getElementById("cons-table").addEventListener("click", async (e) => {
 /* -------------------------------------------------------------------------
    NAVEGAÇÃO / TABS
    ------------------------------------------------------------------------- */
-document.querySelectorAll("nav.tabs button").forEach(btn => {
+document.querySelectorAll("#mo-body nav.tabs button").forEach(btn => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll("nav.tabs button").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll("#mo-body nav.tabs button").forEach(b => b.classList.remove("active"));
     document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
     btn.classList.add("active");
     document.getElementById(`view-${btn.dataset.view}`).classList.add("active");
