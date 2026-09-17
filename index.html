@@ -816,6 +816,13 @@ function requireUnlock() {
 
 const STATUS_LABELS = ["ATIVO","FÉRIAS","AFASTADO","ATESTADO","DIÁRIA","MOBILIZADO","ABANDONO DE EMPREGO","DEMITIDO","OUTRO"];
 const CLASSIF_LABELS = ["FOLHA E EFETIVO","FOLHA DIFERENTE","APENAS FOLHA","APENAS EFETIVO","PJ / TERCERIZADO"];
+const CLASSIF_COLORS = {
+  "FOLHA E EFETIVO": "#C6E0B4",
+  "FOLHA DIFERENTE": "#F4A6A6",
+  "APENAS FOLHA": "#C6E0B4",
+  "APENAS EFETIVO": "#FCD5B4",
+  "PJ / TERCERIZADO": "#BDD7EE"
+};
 
 /* -------------------------------------------------------------------------
    CAMADA DE ARMAZENAMENTO (Firestore se configurado, senão localStorage)
@@ -1806,7 +1813,8 @@ function renderRelatorioMaoDeObra() {
   document.getElementById("relmo-folha-head").innerHTML = `<th>Classificação</th>${obraKeys.map(o => `<th>${escapeHtml(o)}</th>`).join("")}<th>Total</th>`;
   const bodyRows = CLASSIF_LABELS.map(label => {
     const rowTotal = obraKeys.reduce((s, o) => s + (pivot[label][o] || 0), 0);
-    return `<tr><td data-label="Classificação"><strong>${escapeHtml(label)}</strong></td>${obraKeys.map(o => `<td data-label="${escapeHtml(o)}">${pivot[label][o] || ""}</td>`).join("")}<td data-label="Total"><strong>${rowTotal}</strong></td></tr>`;
+    const bg = CLASSIF_COLORS[label] || "";
+    return `<tr><td data-label="Classificação" style="background:${bg};font-weight:700;">${escapeHtml(label)}</td>${obraKeys.map(o => `<td data-label="${escapeHtml(o)}">${pivot[label][o] || 0}</td>`).join("")}<td data-label="Total"><strong>${rowTotal}</strong></td></tr>`;
   }).join("");
   const grandTotalPerObra = obraKeys.map(o => CLASSIF_LABELS.reduce((s, label) => s + (pivot[label][o] || 0), 0));
   const grandTotal = grandTotalPerObra.reduce((a, b) => a + b, 0);
@@ -1864,14 +1872,27 @@ function gerarRelatorioMaoDeObraPDF() {
     tableRows += `<tr class="tot"><td colspan="4"><strong>TOTAL DE COLABORADORES</strong></td><td><strong>${items.length}</strong></td></tr>`;
   });
 
-  const pivotHead = `<th>Classificação</th>${obraKeys.map(o => `<th>${escapeHtml(o)}</th>`).join("")}<th>Total</th>`;
+  const pivotHead = `<th></th>${obraKeys.map(o => `<th>${escapeHtml(o)}</th>`).join("")}<th class="gap"></th><th></th><th>Total Geral</th>`;
   const pivotRows = CLASSIF_LABELS.map(label => {
     const rowTotal = obraKeys.reduce((s, o) => s + (pivot[label][o] || 0), 0);
-    return `<tr><td><strong>${escapeHtml(label)}</strong></td>${obraKeys.map(o => `<td>${pivot[label][o] || ""}</td>`).join("")}<td><strong>${rowTotal}</strong></td></tr>`;
+    const bg = CLASSIF_COLORS[label] || "#EEE";
+    return `<tr>
+      <td style="background:${bg};font-weight:700;">${escapeHtml(label)}</td>
+      ${obraKeys.map(o => `<td>${pivot[label][o] || 0}</td>`).join("")}
+      <td class="gap"></td>
+      <td style="background:${bg};font-weight:700;">${escapeHtml(label)}</td>
+      <td style="font-weight:700;">${rowTotal}</td>
+    </tr>`;
   }).join("");
   const grandTotalPerObra = obraKeys.map(o => CLASSIF_LABELS.reduce((s, label) => s + (pivot[label][o] || 0), 0));
   const grandTotal = grandTotalPerObra.reduce((a, b) => a + b, 0);
-  const pivotTotalRow = `<tr class="tot"><td><strong>TOTAL</strong></td>${grandTotalPerObra.map(n => `<td><strong>${n}</strong></td>`).join("")}<td><strong>${grandTotal}</strong></td></tr>`;
+  const pivotTotalRow = `<tr class="tot">
+    <td><strong>TOTAL</strong></td>
+    ${grandTotalPerObra.map(n => `<td><strong>${n}</strong></td>`).join("")}
+    <td class="gap"></td>
+    <td><strong>TOTAL</strong></td>
+    <td><strong>${grandTotal}</strong></td>
+  </tr>`;
 
   const logoUrl = new URL("logo-lm.png", location.href).href;
   const logoPdcaUrl = new URL("logo-pdca.svg", location.href).href;
@@ -1893,9 +1914,11 @@ function gerarRelatorioMaoDeObraPDF() {
   thead .colhead-row th{background:#0B83B2;color:#fff;text-transform:uppercase;font-size:9.5px;white-space:nowrap;}
   .pivot-wrap{padding:8px 14px 10px;}
   .pivot-wrap table{margin-bottom:0;}
-  .pivot-wrap th{background:#0B83B2;color:#fff;font-size:9px;white-space:nowrap;}
-  .pivot-wrap td{font-size:9px;text-align:center;}
+  .pivot-wrap th{background:#0B83B2;color:#fff;font-size:9px;white-space:nowrap;text-align:center;}
+  .pivot-wrap td{font-size:9.5px;text-align:center;border:1px solid #999;}
   .pivot-wrap td:first-child{text-align:left;}
+  .pivot-wrap th.gap,.pivot-wrap td.gap{border:none;background:none;padding:0;width:14px;}
+  .pivot-wrap tr.tot td{background:#D9D9D9;}
   tr{page-break-inside:avoid;}
   tr.grp{page-break-after:avoid;}
   tr.grp td{background:#DCEEF6;font-weight:800;text-align:center;}
