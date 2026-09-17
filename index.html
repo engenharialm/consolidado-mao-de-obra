@@ -306,6 +306,29 @@
     .form-grid{grid-template-columns:1fr;}
     header{padding:12px 16px;}
     nav.tabs, nav.module-tabs{padding:0 16px;}
+
+    /* Tabelas viram cartões empilhados no celular, em vez de rolar pro lado */
+    .table-wrap table, .table-wrap thead, .table-wrap tbody, .table-wrap tr{display:block;width:100%;}
+    .table-wrap thead{display:none;}
+    .table-wrap tr{
+      border:1px solid var(--border);border-radius:10px;margin-bottom:10px;padding:6px 0;background:var(--card);
+    }
+    .table-wrap tr:last-child{margin-bottom:0;}
+    .table-wrap td{
+      display:flex;justify-content:space-between;align-items:center;gap:10px;
+      border-bottom:1px solid var(--border);padding:9px 14px;white-space:normal;text-align:right;
+    }
+    .table-wrap td:last-child{border-bottom:none;}
+    .table-wrap td::before{
+      content:attr(data-label);font-size:.68rem;font-weight:700;color:var(--text-faint);
+      text-transform:uppercase;letter-spacing:.4px;text-align:left;flex-shrink:0;
+    }
+    .table-wrap td:not([data-label]), .table-wrap td[data-label=""]{justify-content:center;}
+    .table-wrap td:not([data-label])::before, .table-wrap td[data-label=""]::before{content:none;}
+    .table-wrap td.empty-state{display:block;text-align:center;}
+    .table-wrap td.empty-state::before{content:none;}
+    .table-wrap .name-cell{justify-content:flex-end;}
+    .table-wrap .row-actions{justify-content:flex-end;width:100%;}
   }
 </style>
 </head>
@@ -1117,10 +1140,10 @@ function renderDashboard() {
     const workers = c.filter(w => w.obra === o.nome);
     const ativosObra = workers.filter(w => statusClass(w.status) === "st-ativo").length;
     return `<tr>
-      <td><span class="obra-tag">${o.nome}</span></td>
-      <td>${workers.length}</td>
-      <td>${ativosObra}</td>
-      <td class="${isStale(o.lastUpdated) ? "stale" : "muted"}">${timeAgo(o.lastUpdated)}</td>
+      <td data-label="Obra"><span class="obra-tag">${o.nome}</span></td>
+      <td data-label="Colaboradores">${workers.length}</td>
+      <td data-label="Ativos">${ativosObra}</td>
+      <td data-label="Última atualização" class="${isStale(o.lastUpdated) ? "stale" : "muted"}">${timeAgo(o.lastUpdated)}</td>
     </tr>`;
   }).join("");
   document.getElementById("dash-obra-table").innerHTML = rows || `<tr><td colspan="4" class="empty-state">Sem obras cadastradas ainda.</td></tr>`;
@@ -1174,17 +1197,17 @@ function renderConsolidado() {
   document.getElementById("cons-count").textContent = `${list.length} de ${STATE.colaboradores.length} colaborador(es)`;
   const rows = list.map(w => `
     <tr>
-      <td><div class="name-cell"><div class="avatar">${initials(w.nome)}</div>${escapeHtml(w.nome)}</div></td>
-      <td><span class="obra-tag">${escapeHtml(w.obra || "—")}</span></td>
-      <td class="muted">${escapeHtml(w.local || "—")}</td>
-      <td>${escapeHtml(w.funcao || "—")}</td>
-      <td class="muted">${escapeHtml(w.nivel || "—")}</td>
-      <td class="muted">${escapeHtml(w.admissao || "—")}</td>
-      <td class="muted">${escapeHtml(w.fornecedor || "—")}</td>
-      <td class="muted">${escapeHtml(w.frente || "—")}</td>
-      <td><span class="badge ${statusClass(w.status)}">${escapeHtml(w.status || "—")}</span></td>
-      <td class="muted" style="max-width:180px;white-space:normal;">${escapeHtml(w.obs || "")}</td>
-      <td>
+      <td data-label="Nome"><div class="name-cell"><div class="avatar">${initials(w.nome)}</div>${escapeHtml(w.nome)}</div></td>
+      <td data-label="Obra"><span class="obra-tag">${escapeHtml(w.obra || "—")}</span></td>
+      <td data-label="Local" class="muted">${escapeHtml(w.local || "—")}</td>
+      <td data-label="Função">${escapeHtml(w.funcao || "—")}</td>
+      <td data-label="Nível" class="muted">${escapeHtml(w.nivel || "—")}</td>
+      <td data-label="Admissão" class="muted">${escapeHtml(w.admissao || "—")}</td>
+      <td data-label="Fornecedor" class="muted">${escapeHtml(w.fornecedor || "—")}</td>
+      <td data-label="Frente" class="muted">${escapeHtml(w.frente || "—")}</td>
+      <td data-label="Status"><span class="badge ${statusClass(w.status)}">${escapeHtml(w.status || "—")}</span></td>
+      <td data-label="Observação" class="muted" style="max-width:180px;white-space:normal;">${escapeHtml(w.obs || "")}</td>
+      <td data-label="">
         <div class="row-actions">
           <button class="icon-btn" title="Editar" data-edit="${w.id}">✎</button>
           <button class="icon-btn del" title="Excluir" data-del="${w.id}">✕</button>
@@ -1498,16 +1521,16 @@ function renderEquipListaMestre() {
   document.getElementById("eq-count").textContent = `${list.length} de ${EQUIP_STATE.equipamentos.length} equipamento(s)`;
   const rows = list.map(w => `
     <tr>
-      <td><strong>${w.temFoto ? "📷 " : ""}${escapeHtml(w.tipo)}</strong><div class="muted" style="font-size:.72rem;">${escapeHtml([w.marca, w.modelo].filter(Boolean).join(" ")) || "—"}</div></td>
-      <td class="muted">${escapeHtml((w.tag && w.tag !== "-" ? w.tag : w.placa) || "—")}</td>
-      <td class="muted">${escapeHtml(inferCategoriaEquip(w.tipo))}</td>
-      <td><span class="badge ${equipStatusClass(w.situacao)}">${escapeHtml(w.situacao || "—")}</span></td>
-      <td class="muted">${equipPropriedadeLabel(w.locacao)}</td>
-      <td><span class="obra-tag">${escapeHtml(w.obra || "—")}</span></td>
-      <td class="muted">${w.horimetroAtual ? escapeHtml(w.horimetroAtual) + " h" : "—"}</td>
-      <td>${equipHorimetroAlert(w) ? `<span class="badge eq-manutencao">⚠ Manutenção próxima</span>` : `<span class="muted">—</span>`}</td>
-      <td class="muted" style="max-width:200px;white-space:normal;">${escapeHtml(w.obs || "—")}</td>
-      <td>
+      <td data-label="Equipamento"><strong>${w.temFoto ? "📷 " : ""}${escapeHtml(w.tipo)}</strong><div class="muted" style="font-size:.72rem;">${escapeHtml([w.marca, w.modelo].filter(Boolean).join(" ")) || "—"}</div></td>
+      <td data-label="Código" class="muted">${escapeHtml((w.tag && w.tag !== "-" ? w.tag : w.placa) || "—")}</td>
+      <td data-label="Categoria" class="muted">${escapeHtml(inferCategoriaEquip(w.tipo))}</td>
+      <td data-label="Status"><span class="badge ${equipStatusClass(w.situacao)}">${escapeHtml(w.situacao || "—")}</span></td>
+      <td data-label="Propriedade" class="muted">${equipPropriedadeLabel(w.locacao)}</td>
+      <td data-label="Obra"><span class="obra-tag">${escapeHtml(w.obra || "—")}</span></td>
+      <td data-label="Horímetro" class="muted">${w.horimetroAtual ? escapeHtml(w.horimetroAtual) + " h" : "—"}</td>
+      <td data-label="Alerta">${equipHorimetroAlert(w) ? `<span class="badge eq-manutencao">⚠ Manutenção próxima</span>` : `<span class="muted">—</span>`}</td>
+      <td data-label="Observações" class="muted" style="max-width:200px;white-space:normal;">${escapeHtml(w.obs || "—")}</td>
+      <td data-label="">
         <div class="row-actions">
           <button class="icon-btn" title="Editar" data-edit-eq="${w.id}">✎</button>
           <button class="icon-btn del" title="Excluir" data-del-eq="${w.id}">✕</button>
@@ -1556,7 +1579,7 @@ function renderEquipRelatorio() {
   });
   document.getElementById("rel-por-obra").innerHTML = Object.entries(porObra)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([obra, c]) => `<tr><td><span class="obra-tag">${escapeHtml(obra)}</span></td><td>${c.ativo}</td><td>${c.manutencao}</td><td>${c.inativo}</td><td><strong>${c.total}</strong></td></tr>`)
+    .map(([obra, c]) => `<tr><td data-label="Obra"><span class="obra-tag">${escapeHtml(obra)}</span></td><td data-label="Ativo">${c.ativo}</td><td data-label="Manutenção">${c.manutencao}</td><td data-label="Inativo">${c.inativo}</td><td data-label="Total"><strong>${c.total}</strong></td></tr>`)
     .join("") || `<tr><td colspan="5" class="empty-state">Sem dados ainda.</td></tr>`;
 
   const porCategoria = {};
@@ -1565,7 +1588,7 @@ function renderEquipRelatorio() {
   document.getElementById("rel-por-categoria").innerHTML = Object.entries(porCategoria)
     .filter(([, n]) => n > 0)
     .sort(([, a], [, b]) => b - a)
-    .map(([cat, n]) => `<tr><td>${escapeHtml(cat)}</td><td><strong>${n}</strong></td></tr>`)
+    .map(([cat, n]) => `<tr><td data-label="Categoria">${escapeHtml(cat)}</td><td data-label="Total"><strong>${n}</strong></td></tr>`)
     .join("") || `<tr><td colspan="2" class="empty-state">Sem dados ainda.</td></tr>`;
 }
 
