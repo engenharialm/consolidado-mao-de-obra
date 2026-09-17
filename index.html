@@ -430,6 +430,15 @@
 
     <!-- CRUZAMENTO FOLHA (RH) x EFETIVO -->
     <section class="view" id="view-cruzamento">
+      <div class="panel" style="padding:14px 18px;margin-bottom:18px;border:1px solid #E8B4B4;background:#FDF2F2;">
+        <div style="font-weight:700;color:#B42318;margin-bottom:4px;">Zona de risco</div>
+        <div style="font-size:13px;color:#7A271A;margin-bottom:10px;">
+          Apaga TODOS os colaboradores atuais e recria do zero só com os dados da última relação do RH importada acima.
+          Use quando quiser recomeçar o efetivo do zero a partir do RH (ex.: baseline inicial, antes de cruzar com o efetivo da obra).
+        </div>
+        <button class="btn btn-sm" style="background:#B42318;color:#fff;" id="btn-recriar-do-rh">Recriar Mão de Obra a partir do RH (apaga tudo)</button>
+      </div>
+
       <div class="section-title">Cruzamento Folha (RH) x Efetivo
         <span style="display:flex;gap:8px;">
           <input type="file" id="file-input-folha" accept=".xlsx,.xls" style="display:none;">
@@ -2069,7 +2078,8 @@ function parseFolhaExcel(rows) {
     const dataAdmRaw = colIdx.dataAdm !== undefined ? row[colIdx.dataAdm] : "";
     if (!codigo && !formatCell(dataAdmRaw)) continue; // linha de rótulo/observação, não é colaborador
     registros.push({
-      obra: currentObra, nome: nome.trim(),
+      obra: currentObra, nome: nome.trim(), cod: codigo,
+      admissao: excelSerialToDateStr(dataAdmRaw),
       funcao: colIdx.funcao !== undefined ? formatCell(row[colIdx.funcao]).trim() : "",
       empresa: colIdx.empresa !== undefined ? formatCell(row[colIdx.empresa]).trim() : "",
       obs: colIdx.obs !== undefined ? formatCell(row[colIdx.obs]).trim() : ""
@@ -2301,6 +2311,72 @@ document.getElementById("btn-aplicar-cruzamento").addEventListener("click", asyn
     toast("Erro ao aplicar classificação: " + err.message, true);
   } finally {
     btn.disabled = false; btn.textContent = "Aplicar classificação aos colaboradores";
+  }
+});
+
+function limparNomeObraFolha(s) {
+  const semPrefixo = (s || "").replace(/^L\.?M\.?\s*-?\s*/i, "").replace(/^OBRA\s+/i, "").trim();
+  return semPrefixo || s || "SEM OBRA";
+}
+
+function exportarBackupColaboradores(lista) {
+  const rows = [["COD.","OBRA","FUNÇÃO","NÍVEL","NOME","ADMISSÃO","TIPO / FORNECEDOR","STATUS","OBSERVAÇÃO","CLASSIFICAÇÃO"]];
+  lista.forEach(w => rows.push([w.cod||"", w.obra||"", w.funcao||"", w.nivel||"", w.nome||"", w.admissao||"", w.fornecedor||"", w.status||"", w.obs||"", w.classificacao||""]));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Backup");
+  XLSX.writeFile(wb, `backup-mao-de-obra-antes-do-reset-${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+document.getElementById("btn-recriar-do-rh").addEventListener("click", async () => {
+  if (!requireUnlock()) return;
+  if (!pendingFolhaRegistros || !pendingFolhaRegistros.length) {
+    toast("Importe a relação do RH acima primeiro.", true);
+    return;
+  }
+  const totalAtual = STATE.colaboradores.length;
+  const ok = window.confirm(
+    `Isso vai APAGAR os ${totalAtual} colaboradores atuais e recriar ${pendingFolhaRegistros.length} a partir da relação do RH.\n\n` +
+    `Um backup em Excel dos dados atuais será baixado antes de apagar.\n\nEssa ação não pode ser desfeita. Confirma?`
+  );
+  if (!ok) return;
+
+  const btn = document.getElementById("btn-recriar-do-rh");
+  btn.disabled = true; btn.textContent = "Recriando...";
+  try {
+    exportarBackupColaboradores(STATE.colaboradores);
+
+    const obrasAntigas = [...new Set(STATE.colaboradores.map(w => w.obra || "SEM OBRA"))];
+    const byObra = {};
+    obrasAntigas.forEach(o => { byObra[o] = []; });
+
+    pendingFolhaRegistros.forEach(f => {
+      const obraResolvida = folhaObraMap[f.obra] || limparNomeObraFolha(f.obra);
+      const status = /AFASTAD/.test((f.obs || "").toUpperCase()) ? "AFASTADO" : "ATIVO";
+      const rec = {
+        obra: obraResolvida, cod: f.cod || "", local: f.obra || "", funcao: f.funcao || "",
+        nivel: "", nome: f.nome, admissao: f.admissao || "",
+        fornecedor: f.empresa || "LM", sieng: "", frente: "",
+        status, obs: f.obs || "", classificacao: ""
+      };
+      (byObra[obraResolvida] ||= []).push(rec);
+    });
+
+    for (const [obra, list] of Object.entries(byObra)) {
+      await Store.replaceObra(obra, list, {});
+    }
+    await Store.addImportLog({
+      fileName: "Recriação a partir da relação do RH (substituiu tudo)",
+      obras: Object.keys(byObra).filter(o => byObra[o].length),
+      totalRegistros: pendingFolhaRegistros.length
+    });
+    toast(`Mão de obra recriada: ${pendingFolhaRegistros.length} colaborador(es) a partir do RH.`);
+    await reload();
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao recriar: " + err.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Recriar Mão de Obra a partir do RH (apaga tudo)";
   }
 });
 
