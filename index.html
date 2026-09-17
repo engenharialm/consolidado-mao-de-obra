@@ -367,6 +367,7 @@
     <button data-view="consolidado">Consolidado</button>
     <button data-view="porobra">Por Obra</button>
     <button data-view="importacoes">Importações</button>
+    <button data-view="cruzamento">Cruzamento Folha x Efetivo</button>
   </nav>
 
   <main>
@@ -424,6 +425,41 @@
     <section class="view" id="view-importacoes">
       <div class="panel" id="import-log-panel">
         <div class="empty-state">Nenhuma importação registrada ainda.</div>
+      </div>
+    </section>
+
+    <!-- CRUZAMENTO FOLHA (RH) x EFETIVO -->
+    <section class="view" id="view-cruzamento">
+      <div class="section-title">Cruzamento Folha (RH) x Efetivo
+        <span style="display:flex;gap:8px;">
+          <input type="file" id="file-input-folha" accept=".xlsx,.xls" style="display:none;">
+          <button class="btn btn-ghost btn-sm" id="btn-import-folha">Importar relação do RH (Excel) e cruzar</button>
+        </span>
+      </div>
+      <div class="panel" id="folha-cruzamento-panel" style="display:none;padding:16px 18px;">
+        <div id="folha-cruzamento-resumo" style="margin-bottom:12px;font-size:14px;"></div>
+
+        <div id="folha-grupos-panel" style="display:none;margin-bottom:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);">
+          <div style="font-weight:700;margin-bottom:6px;">Equipes / centros de custo não reconhecidos</div>
+          <div style="font-size:13px;color:var(--text-mut,#666);margin-bottom:10px;">
+            Times como "equipe de asfalto" se movem entre obras — clique no card pra ver a equipe e escolha em qual obra ela está atualmente.
+            Isso fica salvo e pode ser mudado a qualquer momento.
+          </div>
+          <div id="folha-grupos-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;"></div>
+          <div style="margin-top:14px;">
+            <button class="btn btn-accent btn-sm" id="btn-salvar-grupos">Salvar atribuições</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Nome</th><th>Obra (Efetivo)</th><th>Obra (Folha)</th><th>Classificação</th><th>Observação</th></tr></thead>
+            <tbody id="folha-cruzamento-body"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:8px;">
+          <button class="btn btn-accent btn-sm" id="btn-aplicar-cruzamento">Aplicar classificação aos colaboradores</button>
+        </div>
       </div>
     </section>
 
@@ -488,38 +524,6 @@
           <div class="card"><div class="label">Total</div><div class="value accent" id="relmo-total">0</div><div class="sub">colaboradores cadastrados</div></div>
           <div class="card"><div class="label">Ativos</div><div class="value" id="relmo-ativos">0</div><div class="sub">em operação nas obras</div></div>
           <div class="card"><div class="label">Fora de operação</div><div class="value" style="color:var(--warning);" id="relmo-inativos">0</div><div class="sub">afastados, férias, saída, etc.</div></div>
-        </div>
-
-        <div class="section-title">Cruzamento Folha (RH) x Efetivo
-          <span style="display:flex;gap:8px;">
-            <input type="file" id="file-input-folha" accept=".xlsx,.xls" style="display:none;">
-            <button class="btn btn-ghost btn-sm" id="btn-import-folha">Importar relação do RH (Excel) e cruzar</button>
-          </span>
-        </div>
-        <div class="panel" id="folha-cruzamento-panel" style="display:none;padding:16px 18px;">
-          <div id="folha-cruzamento-resumo" style="margin-bottom:12px;font-size:14px;"></div>
-
-          <div id="folha-grupos-panel" style="display:none;margin-bottom:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);">
-            <div style="font-weight:700;margin-bottom:6px;">Equipes / centros de custo não reconhecidos</div>
-            <div style="font-size:13px;color:var(--text-mut,#666);margin-bottom:10px;">
-              Times como "equipe de asfalto" se movem entre obras — clique no card pra ver a equipe e escolha em qual obra ela está atualmente.
-              Isso fica salvo e pode ser mudado a qualquer momento.
-            </div>
-            <div id="folha-grupos-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;"></div>
-            <div style="margin-top:14px;">
-              <button class="btn btn-accent btn-sm" id="btn-salvar-grupos">Salvar atribuições</button>
-            </div>
-          </div>
-
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Nome</th><th>Obra (Efetivo)</th><th>Obra (Folha)</th><th>Classificação</th><th>Observação</th></tr></thead>
-              <tbody id="folha-cruzamento-body"></tbody>
-            </table>
-          </div>
-          <div style="margin-top:14px;display:flex;gap:8px;">
-            <button class="btn btn-accent btn-sm" id="btn-aplicar-cruzamento">Aplicar classificação aos colaboradores</button>
-          </div>
         </div>
 
         <div class="section-title">Folha x Efetivo por obra
