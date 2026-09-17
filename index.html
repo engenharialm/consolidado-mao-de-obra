@@ -1602,9 +1602,9 @@ function gerarRelatorioPDF() {
         <td style="${situColor(w.situacao)}">${escapeHtml(w.situacao || "")}</td>
       </tr>`;
     });
-    // "Equip. LM" = equipamentos cujo Proprietário/Locador está registrado como "LM" (frota própria da empresa).
-    const lmCount = items.filter(w => (w.proprietario || "").trim().toUpperCase() === "LM").length;
-    tableRows += `<tr class="tot"><td colspan="2"><strong>TOTAL ${escapeHtml(obra)}</strong></td><td><strong>${items.length}</strong></td><td colspan="2"><strong>EQUIP. LM:</strong></td><td colspan="2"><strong>${lmCount}</strong></td></tr>`;
+    const propriosObra = items.filter(w => equipPropriedadeLabel(w.locacao) === "Próprio").length;
+    const locadosObra = items.filter(w => equipPropriedadeLabel(w.locacao) === "Alugado").length;
+    tableRows += `<tr class="tot"><td colspan="2"><strong>TOTAL ${escapeHtml(obra)}</strong></td><td><strong>${items.length}</strong></td><td><strong>Próprios:</strong></td><td><strong>${propriosObra}</strong></td><td><strong>Locados:</strong></td><td><strong>${locadosObra}</strong></td></tr>`;
   });
 
   const porTipo = {};
@@ -1625,22 +1625,29 @@ function gerarRelatorioPDF() {
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Efetivo de Equipamentos LM</title>
 <style>
   *{box-sizing:border-box;}
-  body{font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#111;margin:16px;}
-  .header{border:2px solid #111;display:flex;align-items:center;padding:10px 16px;margin-bottom:14px;gap:20px;}
-  .header img{width:60px;flex-shrink:0;}
-  .header .title{font-size:16px;font-weight:800;text-align:center;flex:1;}
-  .header .title small{display:block;font-size:10px;font-weight:400;margin-top:4px;}
-  .header .stats{font-size:10.5px;white-space:nowrap;}
+  html,body{width:100%;}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:8.5px;color:#111;margin:0;padding:8px;}
+  .header{border:2px solid #111;display:flex;align-items:center;padding:8px 14px;margin-bottom:10px;gap:16px;page-break-inside:avoid;}
+  .header img{width:50px;flex-shrink:0;}
+  .header .title{font-size:14px;font-weight:800;text-align:center;flex:1;}
+  .header .title small{display:block;font-size:9px;font-weight:400;margin-top:4px;}
+  .header .stats{font-size:9px;white-space:nowrap;}
   .header .stats div{margin:3px 0;}
   .header .stats b{margin-right:4px;}
-  table{width:100%;border-collapse:collapse;margin-bottom:18px;}
-  th,td{border:1px solid #999;padding:4px 6px;font-size:9.5px;text-align:left;}
-  thead th{background:#0B83B2;color:#fff;text-transform:uppercase;font-size:9px;}
+  table{width:100%;border-collapse:collapse;margin-bottom:14px;table-layout:fixed;}
+  th,td{border:1px solid #999;padding:3px 5px;font-size:8px;text-align:left;overflow-wrap:break-word;}
+  thead{display:table-header-group;}
+  thead th{background:#0B83B2;color:#fff;text-transform:uppercase;font-size:7.5px;}
+  tr{page-break-inside:avoid;}
+  tr.grp{page-break-after:avoid;}
   tr.grp td{background:#DCEEF6;font-weight:800;text-align:center;}
   tr.tot td{background:#EDEFF2;}
-  h2{font-size:13px;margin:18px 0 8px;}
+  h2{font-size:12px;margin:14px 0 6px;}
   .no-print{margin-top:10px;}
-  @media print{.no-print{display:none;} @page{size:A4 landscape;margin:10mm;}}
+  @media print{
+    .no-print{display:none;}
+    @page{size:A4 landscape;margin:8mm;}
+  }
 </style>
 </head>
 <body>
@@ -1653,11 +1660,16 @@ function gerarRelatorioPDF() {
     </div>
   </div>
   <table>
+    <colgroup>
+      <col style="width:11%"><col style="width:17%"><col style="width:23%">
+      <col style="width:12%"><col style="width:16%"><col style="width:10%"><col style="width:11%">
+    </colgroup>
     <thead><tr><th>Obra</th><th>Tipo</th><th>Operador</th><th>Marca</th><th>Modelo</th><th>Locação</th><th>Situação</th></tr></thead>
     <tbody>${tableRows}</tbody>
   </table>
   <h2>Resumo por tipo de equipamento</h2>
   <table>
+    <colgroup><col style="width:44%"><col style="width:14%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup>
     <thead><tr><th>Nome do equipamento</th><th>Ativo</th><th>Manutenção</th><th>Inativo</th><th>Total Geral</th></tr></thead>
     <tbody>${resumoRows}<tr class="tot"><td><strong>Total Geral</strong></td><td><strong>${ativo}</strong></td><td><strong>${manutencao}</strong></td><td><strong>${inativo}</strong></td><td><strong>${total}</strong></td></tr></tbody>
   </table>
