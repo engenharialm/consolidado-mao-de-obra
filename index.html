@@ -334,19 +334,7 @@
 </head>
 <body>
 
-<div id="access-gate" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:500;align-items:center;justify-content:center;padding:20px;">
-  <form id="access-gate-form" style="width:100%;max-width:320px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px 26px;text-align:center;">
-    <img src="logo-lm.png" alt="LM" style="width:56px;height:auto;margin:0 auto 16px;display:block;">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:4px;">Consolidado de Mão de Obra</h2>
-    <p style="font-size:.78rem;color:var(--text-dim);margin-bottom:18px;">Acesso restrito — digite a senha para continuar.</p>
-    <input type="password" id="access-gate-input" placeholder="Senha" autocomplete="off"
-      style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-family:inherit;font-size:.85rem;text-align:center;margin-bottom:10px;">
-    <div id="access-gate-error" style="display:none;color:var(--danger);font-size:.74rem;margin-bottom:10px;">Senha incorreta.</div>
-    <button type="submit" class="btn btn-accent" style="width:100%;justify-content:center;">Entrar</button>
-  </form>
-</div>
-
-<div id="app" style="display:none;">
+<div id="app">
 
   <header>
     <div class="brand">
@@ -769,12 +757,11 @@ const firebaseConfig = {
    é uma proteção real contra alguém que abra o código-fonte da página.
    ------------------------------------------------------------------------- */
 const SITE_PASSWORD = "LM12";
-const SITE_UNLOCK_KEY = "moSiteUnlocked"; // localStorage: fica destravado nesse aparelho
-const ACTION_UNLOCK_KEY = "moActionUnlocked"; // sessionStorage: confirmação extra por sessão
+const ACTION_UNLOCK_KEY = "moActionUnlocked"; // sessionStorage: liberado só pra fazer alterações, por sessão
 
 function requireUnlock() {
   if (sessionStorage.getItem(ACTION_UNLOCK_KEY) === "true") return true;
-  const attempt = prompt("Digite a senha para importar/exportar dados:");
+  const attempt = prompt("Digite a senha para fazer essa alteração:");
   if (attempt === null) return false;
   if (attempt === SITE_PASSWORD) {
     sessionStorage.setItem(ACTION_UNLOCK_KEY, "true");
@@ -783,33 +770,6 @@ function requireUnlock() {
   toast("Senha incorreta.", true);
   return false;
 }
-
-function checkSiteAccess() {
-  const gate = document.getElementById("access-gate");
-  const app = document.getElementById("app");
-  if (localStorage.getItem(SITE_UNLOCK_KEY) === "true") {
-    gate.style.display = "none";
-    app.style.display = "";
-    return true;
-  }
-  gate.style.display = "flex";
-  app.style.display = "none";
-  return false;
-}
-
-document.getElementById("access-gate-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const input = document.getElementById("access-gate-input");
-  if (input.value === SITE_PASSWORD) {
-    localStorage.setItem(SITE_UNLOCK_KEY, "true");
-    document.getElementById("access-gate-error").style.display = "none";
-    checkSiteAccess();
-  } else {
-    document.getElementById("access-gate-error").style.display = "block";
-    input.value = "";
-    input.focus();
-  }
-});
 
 const STATUS_LABELS = ["ATIVO","FÉRIAS","AFASTADO","ATESTADO","DIÁRIA","MOBILIZADO","ABANDONO DE EMPREGO","DEMITIDO","OUTRO"];
 const CLASSIF_LABELS = ["FOLHA E EFETIVO","FOLHA DIFERENTE","APENAS FOLHA","APENAS EFETIVO","PJ / TERCERIZADO"];
@@ -1464,6 +1424,7 @@ function wireEquipDragDrop() {
   document.querySelectorAll(".kanban-card [data-del]").forEach(btn => {
     btn.addEventListener("click", async (e) => {
       e.stopPropagation();
+      if (!requireUnlock()) return;
       if (!confirm("Excluir este equipamento do consolidado?")) return;
       await EquipStore.deleteItem(btn.dataset.del);
       await deleteEquipFoto(btn.dataset.del);
@@ -1481,6 +1442,7 @@ function wireEquipDragDrop() {
       const group = col.dataset.group;
       const item = EQUIP_STATE.equipamentos.find(w => w.id === id);
       if (!item) return;
+      if (!requireUnlock()) return;
       if (equipGroupBy === "situacao") {
         if (item.situacao === group) return;
         item.situacao = group;
@@ -1548,6 +1510,7 @@ document.getElementById("equip-lista-table").addEventListener("click", async (e)
     const item = EQUIP_STATE.equipamentos.find(w => w.id === editId);
     if (item) openEquipModal(item);
   } else if (delId) {
+    if (!requireUnlock()) return;
     if (confirm("Excluir este equipamento do consolidado?")) {
       await EquipStore.deleteItem(delId);
       await deleteEquipFoto(delId);
@@ -1717,6 +1680,7 @@ function openEquipModal(item) {
 document.getElementById("btn-add-equip").addEventListener("click", () => openEquipModal(null));
 
 document.getElementById("btn-save-equip").addEventListener("click", async () => {
+  if (!requireUnlock()) return;
   const f = id => document.getElementById(id).value.trim();
   const tipo = f("eqf-tipo"), obra = f("eqf-obra");
   if (!tipo || !obra) { toast("Preencha ao menos Tipo e Obra.", true); return; }
@@ -2099,6 +2063,7 @@ function openWorkerModal(worker) {
 document.getElementById("btn-add-worker").addEventListener("click", () => openWorkerModal(null));
 
 document.getElementById("btn-save-worker").addEventListener("click", async () => {
+  if (!requireUnlock()) return;
   const f = id => document.getElementById(id).value.trim();
   const nome = f("w-nome"), obra = f("w-obra");
   if (!nome || !obra) { toast("Preencha ao menos Nome e Obra.", true); return; }
@@ -2122,6 +2087,7 @@ document.getElementById("cons-table").addEventListener("click", async (e) => {
     const worker = STATE.colaboradores.find(w => w.id === editId);
     if (worker) openWorkerModal(worker);
   } else if (delId) {
+    if (!requireUnlock()) return;
     if (confirm("Excluir este colaborador do consolidado?")) {
       await Store.deleteItem(delId);
       toast("Colaborador removido.");
@@ -2173,7 +2139,6 @@ function toast(msg, isError) {
 /* -------------------------------------------------------------------------
    INIT
    ------------------------------------------------------------------------- */
-checkSiteAccess();
 reload();
 </script>
 </body>
