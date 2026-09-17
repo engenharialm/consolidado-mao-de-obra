@@ -264,6 +264,18 @@
     padding:9px 11px;border-radius:8px;font-family:inherit;font-size:.82rem;
   }
   .field textarea{resize:vertical;min-height:60px;}
+  .manut-item-row{display:flex;gap:6px;align-items:center;}
+  .manut-item-row input[type=text]{
+    background:var(--bg);border:1px solid var(--border);color:var(--text);
+    padding:8px 10px;border-radius:8px;font-family:inherit;font-size:.8rem;
+  }
+  .manut-item-row .mi-nome{flex:1.4;}
+  .manut-item-row .mi-data{flex:1;max-width:130px;}
+  .manut-item-row .mi-del{
+    width:28px;height:28px;flex-shrink:0;border-radius:6px;border:1px solid var(--border);background:transparent;
+    color:var(--text-dim);cursor:pointer;font-size:.75rem;
+  }
+  .manut-item-row .mi-del:hover{border-color:var(--danger);color:var(--danger);}
   .modal-foot{padding:16px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;}
 
   .import-preview{padding:20px 22px;}
@@ -562,6 +574,11 @@
               <input type="text" id="eqf-previsao" placeholder="dd/mm/aaaa">
             </div>
           </div>
+        </div>
+        <div class="field full">
+          <label>Itens de manutenção</label>
+          <div id="eqf-manut-itens-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-add-manut-item" style="margin-top:8px;">+ Item</button>
         </div>
         <div class="field">
           <label>Marca</label>
@@ -1326,6 +1343,38 @@ function toggleEquipManutencaoBox() {
 }
 document.getElementById("eqf-situacao").addEventListener("change", toggleEquipManutencaoBox);
 
+const MANUT_ITENS_PADRAO = ["Troca de óleo", "Filtros", "Lubrificação"];
+
+function addManutItemRow(nome = "", data = "") {
+  const list = document.getElementById("eqf-manut-itens-list");
+  const row = document.createElement("div");
+  row.className = "manut-item-row";
+  row.innerHTML = `
+    <input type="text" class="mi-nome" placeholder="Item (ex: Troca de óleo)" value="${escapeHtml(nome)}">
+    <input type="text" class="mi-data" placeholder="dd/mm/aaaa" value="${escapeHtml(data)}">
+    <button type="button" class="mi-del" title="Remover">✕</button>
+  `;
+  row.querySelector(".mi-del").addEventListener("click", () => row.remove());
+  list.appendChild(row);
+}
+
+document.getElementById("btn-add-manut-item").addEventListener("click", () => addManutItemRow());
+
+function renderManutItens(itens) {
+  document.getElementById("eqf-manut-itens-list").innerHTML = "";
+  const list = (itens && itens.length) ? itens : MANUT_ITENS_PADRAO.map(nome => ({ nome, data: "" }));
+  list.forEach(it => addManutItemRow(it.nome, it.data));
+}
+
+function collectManutItens() {
+  return [...document.querySelectorAll("#eqf-manut-itens-list .manut-item-row")]
+    .map(row => ({
+      nome: row.querySelector(".mi-nome").value.trim(),
+      data: row.querySelector(".mi-data").value.trim()
+    }))
+    .filter(it => it.nome);
+}
+
 function openEquipModal(item) {
   document.getElementById("equip-modal-title").textContent = item ? "Editar equipamento" : "Adicionar equipamento";
   const f = id => document.getElementById(id);
@@ -1350,6 +1399,7 @@ function openEquipModal(item) {
   f("eqf-sieng").value = item?.sieng || "";
   f("eqf-frente").value = item?.frente || "";
   f("eqf-obs").value = item?.obs || "";
+  renderManutItens(item?.manutencaoItens);
   document.getElementById("modal-equip").dataset.editId = item?.id || "";
   toggleEquipManutencaoBox();
   document.getElementById("modal-equip").classList.add("open");
@@ -1371,7 +1421,8 @@ document.getElementById("btn-save-equip").addEventListener("click", async () => 
     chassis: f("eqf-chassis"), ano: f("eqf-ano"), sieng: f("eqf-sieng"), frente: f("eqf-frente"), obs: f("eqf-obs"),
     horimetroAtual: f("eqf-horimetro-atual"), horimetroManutencao: f("eqf-horimetro-manutencao"),
     motivoManutencao: situacao === "MANUTENÇÃO" ? f("eqf-motivo") : "",
-    previsaoDevolucao: situacao === "MANUTENÇÃO" ? f("eqf-previsao") : ""
+    previsaoDevolucao: situacao === "MANUTENÇÃO" ? f("eqf-previsao") : "",
+    manutencaoItens: collectManutItens()
   };
   await EquipStore.saveItem(rec);
   closeModals();
