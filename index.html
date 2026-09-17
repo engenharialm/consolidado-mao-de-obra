@@ -490,6 +490,25 @@
           <div class="card"><div class="label">Fora de operação</div><div class="value" style="color:var(--warning);" id="relmo-inativos">0</div><div class="sub">afastados, férias, saída, etc.</div></div>
         </div>
 
+        <div class="section-title">Cruzamento Folha (RH) x Efetivo
+          <span style="display:flex;gap:8px;">
+            <input type="file" id="file-input-folha" accept=".xlsx,.xls" style="display:none;">
+            <button class="btn btn-ghost btn-sm" id="btn-import-folha">Importar relação do RH (Excel) e cruzar</button>
+          </span>
+        </div>
+        <div class="panel" id="folha-cruzamento-panel" style="display:none;padding:16px 18px;">
+          <div id="folha-cruzamento-resumo" style="margin-bottom:12px;font-size:14px;"></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Nome</th><th>Obra (Efetivo)</th><th>Obra (Folha)</th><th>Classificação</th><th>Observação</th></tr></thead>
+              <tbody id="folha-cruzamento-body"></tbody>
+            </table>
+          </div>
+          <div style="margin-top:14px;display:flex;gap:8px;">
+            <button class="btn btn-accent btn-sm" id="btn-aplicar-cruzamento">Aplicar classificação aos colaboradores</button>
+          </div>
+        </div>
+
         <div class="section-title">Folha x Efetivo por obra
           <span style="display:flex;gap:8px;">
             <button class="btn btn-ghost btn-sm" id="btn-relatorio-pdf-mo">Gerar Relatório PDF</button>
@@ -1964,6 +1983,204 @@ function gerarRelatorioMaoDeObraPDF() {
 }
 
 document.getElementById("btn-relatorio-pdf-mo").addEventListener("click", gerarRelatorioMaoDeObraPDF);
+
+/* -------------------------------------------------------------------------
+   CRUZAMENTO FOLHA (relação do RH) x EFETIVO (planilha semanal)
+   ------------------------------------------------------------------------- */
+function stripAccents(s) { return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+function normNome(s) { return stripAccents(s || "").toUpperCase().trim().replace(/\s+/g, " "); }
+const OBRA_STOPWORDS = new Set(["LM","OBRA","PREFEITURA","MUNICIPAL","DE","DA","DO","CENTRO","CUSTO","ADM","ESCRITORIO","ESCRITÓRIO","USINA","SAE"]);
+function obraTokens(s) {
+  return stripAccents(s || "").toUpperCase().replace(/[^A-Z0-9\s]/g, " ").split(/\s+/)
+    .filter(t => t && t.length >= 3 && !OBRA_STOPWORDS.has(t) && !/^\d+$/.test(t));
+}
+function obrasMatch(a, b) {
+  const ta = obraTokens(a), tb = obraTokens(b);
+  if (!ta.length || !tb.length) return false;
+  return ta.some(t1 => tb.some(t2 => t1 === t2 || (t1.length >= 5 && t2.length >= 5 && (t1.startsWith(t2.slice(0, 5)) || t2.startsWith(t1.slice(0, 5))))));
+}
+
+function parseFolhaExcel(rows) {
+  const registros = [];
+  let currentObra = "";
+  let colIdx = {};
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const c0 = formatCell(row[0]);
+    if (/^Centro de custo/i.test(c0)) {
+      currentObra = c0.replace(/^Centro de custo:?\s*\d*\s*-?\s*/i, "").trim();
+      continue;
+    }
+    const rowUpper = row.map(c => formatCell(c).toUpperCase());
+    if (rowUpper.some(c => c.includes("NOME")) && rowUpper.some(c => c.includes("FUNÇÃO") || c.includes("FUNCAO"))) {
+      rowUpper.forEach((c, idx) => {
+        if (c.includes("CÓDIGO") || c.includes("CODIGO")) colIdx.codigo = idx;
+        else if (c.includes("NOME")) colIdx.nome = idx;
+        else if (c.includes("ADM")) colIdx.dataAdm = idx;
+        else if (c.includes("FUNÇÃO") || c.includes("FUNCAO")) colIdx.funcao = idx;
+        else if (c.includes("EMPRESA")) colIdx.empresa = idx;
+        else if (c.includes("OBSERVA")) colIdx.obs = idx;
+      });
+      continue;
+    }
+    if (colIdx.nome === undefined) continue;
+    const nome = formatCell(row[colIdx.nome]);
+    if (!nome || /^total\b/i.test(nome)) continue;
+    const codigo = colIdx.codigo !== undefined ? formatCell(row[colIdx.codigo]) : "";
+    const dataAdmRaw = colIdx.dataAdm !== undefined ? row[colIdx.dataAdm] : "";
+    if (!codigo && !formatCell(dataAdmRaw)) continue; // linha de rótulo/observação, não é colaborador
+    registros.push({
+      obra: currentObra, nome: nome.trim(),
+      funcao: colIdx.funcao !== undefined ? formatCell(row[colIdx.funcao]).trim() : "",
+      empresa: colIdx.empresa !== undefined ? formatCell(row[colIdx.empresa]).trim() : "",
+      obs: colIdx.obs !== undefined ? formatCell(row[colIdx.obs]).trim() : ""
+    });
+  }
+  return registros;
+}
+
+let pendingCruzamento = null;
+
+function computeCruzamento(folhaRegistros) {
+  const efetivo = STATE.colaboradores;
+  const efetivoPorNome = {};
+  efetivo.forEach(w => {
+    const k = normNome(w.nome);
+    (efetivoPorNome[k] ||= []).push(w);
+  });
+  const folhaPorNome = {};
+  folhaRegistros.forEach(f => {
+    const k = normNome(f.nome);
+    (folhaPorNome[k] ||= []).push(f);
+  });
+
+  const linhas = [];
+  const nomesVistos = new Set();
+
+  function classificar(efetivoRec, folhaRec) {
+    const fornecedorPJ = (efetivoRec && efetivoRec.fornecedor && normNome(efetivoRec.fornecedor) !== "LM" && efetivoRec.fornecedor.trim() !== "")
+      || (folhaRec && folhaRec.empresa);
+    if (fornecedorPJ) return { classificacao: "PJ / TERCERIZADO", obs: `Empresa: ${(folhaRec && folhaRec.empresa) || (efetivoRec && efetivoRec.fornecedor) || ""}` };
+    if (efetivoRec && folhaRec) {
+      if (obrasMatch(efetivoRec.obra, folhaRec.obra)) return { classificacao: "FOLHA E EFETIVO", obs: "" };
+      return { classificacao: "FOLHA DIFERENTE", obs: `Efetivo: ${efetivoRec.obra || "—"} / Folha: ${folhaRec.obra || "—"}` };
+    }
+    if (folhaRec && !efetivoRec) return { classificacao: "APENAS FOLHA", obs: "Não encontrado no efetivo (planilha semanal)" };
+    if (efetivoRec && !folhaRec) return { classificacao: "APENAS EFETIVO", obs: "Não encontrado na relação do RH" };
+    return { classificacao: "", obs: "" };
+  }
+
+  Object.keys(efetivoPorNome).forEach(k => {
+    nomesVistos.add(k);
+    const efetivoRecs = efetivoPorNome[k];
+    const folhaRecs = folhaPorNome[k] || [];
+    const dup = efetivoRecs.length > 1 || folhaRecs.length > 1;
+    efetivoRecs.forEach((efetivoRec, i) => {
+      const folhaRec = folhaRecs[i] || folhaRecs[0];
+      const r = classificar(efetivoRec, folhaRec);
+      linhas.push({
+        colaboradorId: efetivoRec.id, nome: efetivoRec.nome,
+        obraEfetivo: efetivoRec.obra || "—", obraFolha: folhaRec ? (folhaRec.obra || "—") : "—",
+        classificacao: r.classificacao,
+        obs: (dup ? "Possível duplicidade — " : "") + r.obs
+      });
+    });
+  });
+  Object.keys(folhaPorNome).forEach(k => {
+    if (nomesVistos.has(k)) return;
+    const folhaRecs = folhaPorNome[k];
+    const dup = folhaRecs.length > 1;
+    folhaRecs.forEach(folhaRec => {
+      const r = classificar(null, folhaRec);
+      linhas.push({
+        colaboradorId: null, nome: folhaRec.nome,
+        obraEfetivo: "—", obraFolha: folhaRec.obra || "—",
+        classificacao: r.classificacao,
+        obs: (dup ? "Possível duplicidade — " : "") + r.obs
+      });
+    });
+  });
+
+  linhas.sort((a, b) => a.nome.localeCompare(b.nome));
+  return linhas;
+}
+
+function renderCruzamento(linhas) {
+  pendingCruzamento = linhas;
+  document.getElementById("folha-cruzamento-panel").style.display = "";
+  const counts = {};
+  linhas.forEach(l => { counts[l.classificacao] = (counts[l.classificacao] || 0) + 1; });
+  const dupCount = linhas.filter(l => l.obs.startsWith("Possível duplicidade")).length;
+  document.getElementById("folha-cruzamento-resumo").innerHTML =
+    `<strong>${linhas.length}</strong> nomes comparados — ` +
+    CLASSIF_LABELS.map(l => `${escapeHtml(l)}: <strong>${counts[l] || 0}</strong>`).join(" · ") +
+    (dupCount ? ` · <span style="color:var(--warning);">Possível duplicidade: <strong>${dupCount}</strong></span>` : "");
+  document.getElementById("folha-cruzamento-body").innerHTML = linhas.map(l => {
+    const warn = l.classificacao === "FOLHA DIFERENTE" || l.obs.startsWith("Possível duplicidade") || l.classificacao === "APENAS FOLHA" || l.classificacao === "APENAS EFETIVO";
+    return `<tr>
+      <td data-label="Nome">${escapeHtml(l.nome)}</td>
+      <td data-label="Obra (Efetivo)">${escapeHtml(l.obraEfetivo)}</td>
+      <td data-label="Obra (Folha)">${escapeHtml(l.obraFolha)}</td>
+      <td data-label="Classificação"><strong>${escapeHtml(l.classificacao)}</strong></td>
+      <td data-label="Observação" style="${warn ? "color:var(--warning);" : ""}">${escapeHtml(l.obs)}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="5" class="empty-state">Nenhum registro para comparar.</td></tr>`;
+}
+
+document.getElementById("btn-import-folha").addEventListener("click", () => {
+  if (!requireUnlock()) return;
+  document.getElementById("file-input-folha").click();
+});
+
+document.getElementById("file-input-folha").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const btn = document.getElementById("btn-import-folha");
+  btn.disabled = true; btn.textContent = "Lendo planilha...";
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: true });
+    const registros = parseFolhaExcel(rows);
+    if (!registros.length) {
+      toast("Não foi possível identificar colaboradores nessa planilha. Verifique se é a relação do RH por centro de custo.", true);
+      return;
+    }
+    const linhas = computeCruzamento(registros);
+    renderCruzamento(linhas);
+    toast(`Relação do RH lida: ${registros.length} colaborador(es) encontrados.`);
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao ler a planilha: " + err.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Importar relação do RH (Excel) e cruzar";
+  }
+});
+
+document.getElementById("btn-aplicar-cruzamento").addEventListener("click", async () => {
+  if (!requireUnlock()) return;
+  if (!pendingCruzamento) return;
+  const alvo = pendingCruzamento.filter(l => l.colaboradorId && l.classificacao);
+  if (!alvo.length) { toast("Nada para aplicar.", true); return; }
+  const btn = document.getElementById("btn-aplicar-cruzamento");
+  btn.disabled = true; btn.textContent = "Aplicando...";
+  try {
+    for (const l of alvo) {
+      const rec = STATE.colaboradores.find(w => w.id === l.colaboradorId);
+      if (!rec) continue;
+      await Store.saveItem({ ...rec, classificacao: l.classificacao });
+    }
+    toast(`Classificação aplicada a ${alvo.length} colaborador(es).`);
+    await reload();
+    renderRelatorioMaoDeObra();
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao aplicar classificação: " + err.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Aplicar classificação aos colaboradores";
+  }
+});
 
 function toggleEquipManutencaoBox() {
   const isManutencao = document.getElementById("eqf-situacao").value === "MANUTENÇÃO";
