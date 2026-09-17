@@ -2174,11 +2174,12 @@ function renderGruposNaoReconhecidos(folhaRegistros, linhas) {
 
   document.getElementById("folha-grupos-body").innerHTML = grupos.map(([centro, regs]) => {
     const atual = folhaObraMap[centro] || "";
+    const encarregado = regs.find(r => (r.funcao || "").toUpperCase().includes("ENCARREGADO"));
     const opts = [`<option value="">— não atribuir —</option>`]
       .concat(obrasConhecidas.map(o => `<option value="${escapeHtml(o)}" ${o === atual ? "selected" : ""}>${escapeHtml(o)}</option>`))
       .join("");
     return `<tr>
-      <td data-label="Centro de custo">${escapeHtml(centro || "(sem nome)")}</td>
+      <td data-label="Centro de custo">${escapeHtml(centro || "(sem nome)")}${encarregado ? `<br><span style="font-size:12px;color:var(--text-mut,#666);">Encarregado: ${escapeHtml(encarregado.nome)}</span>` : ""}</td>
       <td data-label="Pessoas">${regs.length}</td>
       <td data-label="Atribuir à obra"><select class="folha-obra-assign" data-centro="${escapeHtml(centro)}">${opts}</select></td>
     </tr>`;
