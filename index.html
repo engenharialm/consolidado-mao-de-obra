@@ -358,6 +358,7 @@
   <nav class="module-tabs">
     <button data-module="maodeobra" class="active">👷 Mão de Obra</button>
     <button data-module="equipamentos">🚜 Equipamentos</button>
+    <button data-module="relatorios">📊 Relatórios</button>
   </nav>
 
   <div id="mo-body">
@@ -435,7 +436,6 @@
     <nav class="tabs">
       <button data-eview="quadro" class="active">Quadro</button>
       <button data-eview="lista">Lista Mestre</button>
-      <button data-eview="relatorio">Relatório</button>
     </nav>
 
     <div class="equip-toolbar" id="equip-shared-toolbar">
@@ -473,7 +473,47 @@
       </div>
     </section>
 
-    <section class="eview" id="equip-view-relatorio">
+  </div>
+
+  <!-- RELATÓRIOS (Mão de Obra e Equipamentos) -->
+  <div id="relatorios-body" style="display:none;">
+    <nav class="tabs">
+      <button data-rview="maodeobra" class="active">👷 Mão de Obra</button>
+      <button data-rview="equipamentos">🚜 Equipamentos</button>
+    </nav>
+
+    <section class="eview active" id="relatorio-view-maodeobra">
+      <main style="padding:24px 28px 60px;max-width:1400px;width:100%;margin:0 auto;">
+        <div class="cards-row" style="grid-template-columns:repeat(3,1fr);">
+          <div class="card"><div class="label">Total</div><div class="value accent" id="relmo-total">0</div><div class="sub">colaboradores cadastrados</div></div>
+          <div class="card"><div class="label">Ativos</div><div class="value" id="relmo-ativos">0</div><div class="sub">em operação nas obras</div></div>
+          <div class="card"><div class="label">Fora de operação</div><div class="value" style="color:var(--warning);" id="relmo-inativos">0</div><div class="sub">afastados, férias, saída, etc.</div></div>
+        </div>
+
+        <div class="section-title">Folha x Efetivo por obra
+          <span style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" id="btn-relatorio-pdf-mo">Gerar Relatório PDF</button>
+            <button class="btn btn-accent btn-sm" id="btn-export-relatorio-mo">Exportar Excel</button>
+          </span>
+        </div>
+        <div class="panel table-wrap">
+          <table>
+            <thead><tr id="relmo-folha-head"><th>Classificação</th></tr></thead>
+            <tbody id="relmo-folha-efetivo"></tbody>
+          </table>
+        </div>
+
+        <div class="section-title">Colaboradores por obra</div>
+        <div class="panel table-wrap">
+          <table>
+            <thead><tr><th>Obra</th><th>Ativo</th><th>Fora de operação</th><th>Total</th></tr></thead>
+            <tbody id="relmo-por-obra"></tbody>
+          </table>
+        </div>
+      </main>
+    </section>
+
+    <section class="eview" id="relatorio-view-equipamentos">
       <main style="padding:24px 28px 60px;max-width:1400px;width:100%;margin:0 auto;">
         <div class="cards-row" style="grid-template-columns:repeat(3,1fr);">
           <div class="card"><div class="label">Total</div><div class="value accent" id="rel-total">0</div><div class="sub">equipamentos cadastrados</div></div>
@@ -972,6 +1012,7 @@ let STATE = { colaboradores: [], obras: {}, importacoes: [] };
 let EQUIP_STATE = { equipamentos: [], obras: {}, importacoes: [] };
 let currentModule = "maodeobra";
 let equipLoaded = false;
+let relatoriosSubView = "maodeobra";
 
 async function reload() {
   try {
@@ -1006,6 +1047,7 @@ function renderAll() {
   renderPorObra();
   renderImportacoes();
   updateConnStatus();
+  if (currentModule === "relatorios" && relatoriosSubView === "maodeobra") renderRelatorioMaoDeObra();
 }
 
 /* -------------------------------------------------------------------------
@@ -1015,16 +1057,50 @@ function switchModule(mod) {
   currentModule = mod;
   document.querySelectorAll("nav.module-tabs button").forEach(b => b.classList.toggle("active", b.dataset.module === mod));
   const isEquip = mod === "equipamentos";
-  document.getElementById("mo-body").style.display = isEquip ? "none" : "";
+  const isRelatorios = mod === "relatorios";
+  document.getElementById("mo-body").style.display = (mod === "maodeobra") ? "" : "none";
   document.getElementById("equip-body").style.display = isEquip ? "" : "none";
+  document.getElementById("relatorios-body").style.display = isRelatorios ? "" : "none";
+  document.getElementById("btn-import").style.display = isRelatorios ? "none" : "";
+  document.getElementById("btn-export").style.display = isRelatorios ? "none" : "";
   document.getElementById("btn-import").textContent = isEquip ? "Importar planilha de equipamentos" : "Importar planilha semanal";
-  document.getElementById("brand-title").textContent = isEquip ? "Controle de Equipamentos" : "Consolidado de Mão de Obra";
-  document.getElementById("brand-sub").textContent = isEquip ? "LM CONSTRUTORA — EQUIPAMENTOS POR OBRA" : "LM CONSTRUTORA — EFETIVO POR OBRA";
-  if (isEquip && !equipLoaded) reloadEquip();
+  if (isRelatorios) {
+    document.getElementById("brand-title").textContent = "Relatórios";
+    document.getElementById("brand-sub").textContent = "LM CONSTRUTORA — RELATÓRIOS GERENCIAIS";
+  } else {
+    document.getElementById("brand-title").textContent = isEquip ? "Controle de Equipamentos" : "Consolidado de Mão de Obra";
+    document.getElementById("brand-sub").textContent = isEquip ? "LM CONSTRUTORA — EQUIPAMENTOS POR OBRA" : "LM CONSTRUTORA — EFETIVO POR OBRA";
+  }
+  if ((isEquip || (isRelatorios && relatoriosSubView === "equipamentos")) && !equipLoaded) reloadEquip();
+  if (isRelatorios) renderRelatoriosActive();
 }
 
 document.querySelectorAll("nav.module-tabs button").forEach(btn => {
   btn.addEventListener("click", () => switchModule(btn.dataset.module));
+});
+
+/* -------------------------------------------------------------------------
+   RELATÓRIOS (sub-navegação Mão de Obra / Equipamentos)
+   ------------------------------------------------------------------------- */
+function switchRelatoriosSubView(view) {
+  relatoriosSubView = view;
+  document.querySelectorAll("#relatorios-body nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.rview === view));
+  document.getElementById("relatorio-view-maodeobra").classList.toggle("active", view === "maodeobra");
+  document.getElementById("relatorio-view-equipamentos").classList.toggle("active", view === "equipamentos");
+  renderRelatoriosActive();
+}
+
+function renderRelatoriosActive() {
+  if (relatoriosSubView === "maodeobra") {
+    renderRelatorioMaoDeObra();
+  } else {
+    if (!equipLoaded) { reloadEquip(); return; }
+    renderEquipRelatorio();
+  }
+}
+
+document.querySelectorAll("#relatorios-body nav.tabs button").forEach(btn => {
+  btn.addEventListener("click", () => switchRelatoriosSubView(btn.dataset.rview));
 });
 
 function updateConnStatus() {
@@ -1274,9 +1350,6 @@ function switchEquipSubView(view) {
   equipSubView = view;
   document.querySelectorAll('#equip-body nav.tabs button').forEach(b => b.classList.toggle("active", b.dataset.eview === view));
   document.querySelectorAll('#equip-body .eview').forEach(v => v.classList.toggle("active", v.id === "equip-view-" + view));
-  document.getElementById("equip-shared-toolbar").style.display = view === "relatorio" ? "none" : "";
-  document.getElementById("equip-categoria-pills").style.display = view === "relatorio" ? "none" : "";
-  if (view === "relatorio") renderEquipRelatorio();
 }
 document.querySelectorAll('#equip-body nav.tabs button').forEach(btn => {
   btn.addEventListener("click", () => switchEquipSubView(btn.dataset.eview));
@@ -1286,7 +1359,7 @@ function renderEquipAll() {
   renderEquipFilters();
   renderEquipKanban();
   renderEquipListaMestre();
-  if (equipSubView === "relatorio") renderEquipRelatorio();
+  if (currentModule === "relatorios" && relatoriosSubView === "equipamentos") renderEquipRelatorio();
 }
 
 function renderEquipFilters() {
@@ -1558,7 +1631,15 @@ function renderEquipRelatorio() {
     .join("") || `<tr><td colspan="2" class="empty-state">Sem dados ainda.</td></tr>`;
 }
 
-document.getElementById("btn-export-relatorio").addEventListener("click", () => document.getElementById("btn-export").click());
+document.getElementById("btn-export-relatorio").addEventListener("click", () => {
+  if (!requireUnlock()) return;
+  exportEquipamentosExcel();
+});
+
+document.getElementById("btn-export-relatorio-mo").addEventListener("click", () => {
+  if (!requireUnlock()) return;
+  exportMaoDeObraExcel();
+});
 
 /* -------------------------------------------------------------------------
    EQUIPAMENTOS — RELATÓRIO PDF (padrão "EFETIVO DE EQUIPAMENTOS LM")
@@ -1622,14 +1703,16 @@ function gerarRelatorioPDF() {
   }).join("");
 
   const logoUrl = new URL("logo-lm.png", location.href).href;
+  const logoPdcaUrl = new URL("logo-pdca.svg", location.href).href;
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Efetivo de Equipamentos LM</title>
 <style>
   *{box-sizing:border-box;}
   html,body{width:100%;}
   body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;margin:0;padding:10px;}
-  .header{border:2px solid #111;padding:10px 14px;margin-bottom:12px;page-break-inside:avoid;}
+  .header{border:2px solid #111;padding:10px 14px;background:#fff;}
   .header-top{display:flex;align-items:center;gap:14px;margin-bottom:8px;}
   .header img{width:48px;flex-shrink:0;}
+  .header img.logo-pdca{width:56px;}
   .header .title{font-size:15px;font-weight:800;text-align:center;flex:1;}
   .header .title small{display:block;font-size:10px;font-weight:400;margin-top:4px;}
   .header .stats div{margin:3px 0;font-size:10.5px;}
@@ -1637,7 +1720,8 @@ function gerarRelatorioPDF() {
   table{width:100%;border-collapse:collapse;margin-bottom:16px;table-layout:fixed;}
   th,td{border:1px solid #999;padding:4px 5px;font-size:10px;text-align:left;overflow-wrap:break-word;line-height:1.3;}
   thead{display:table-header-group;}
-  thead th{background:#0B83B2;color:#fff;text-transform:uppercase;font-size:9.5px;white-space:nowrap;}
+  thead .header-row th{padding:0;border:none;background:none;}
+  thead .colhead-row th{background:#0B83B2;color:#fff;text-transform:uppercase;font-size:9.5px;white-space:nowrap;}
   tr{page-break-inside:avoid;}
   tr.grp{page-break-after:avoid;}
   tr.grp td{background:#DCEEF6;font-weight:800;text-align:center;}
@@ -1651,28 +1735,33 @@ function gerarRelatorioPDF() {
 </style>
 </head>
 <body>
-  <div class="header">
-    <div class="header-top">
-      <img src="${logoUrl}" alt="LM">
-      <div class="title">EFETIVO DE EQUIPAMENTOS LM<small>Gerado em ${new Date().toLocaleDateString("pt-BR")}</small></div>
-    </div>
-    <div class="stats">
-      <div><b>Total de equipamentos</b> ${total} &nbsp; <b>Próprios</b> ${proprios} &nbsp; <b>Locados</b> ${locados} &nbsp; <b>Em manutenção</b> ${manutencao}</div>
-      <div><b>% Próprios</b> ${pct(proprios)}% &nbsp; <b>% Locados</b> ${pct(locados)}% &nbsp; <b>Inativo</b> ${inativo} &nbsp; <b>Em operação</b> ${ativo}</div>
-    </div>
-  </div>
   <table>
     <colgroup>
       <col style="width:12%"><col style="width:18%"><col style="width:21%">
       <col style="width:12%"><col style="width:14%"><col style="width:11%"><col style="width:12%">
     </colgroup>
-    <thead><tr><th>Obra</th><th>Tipo</th><th>Operador</th><th>Marca</th><th>Modelo</th><th>Locação</th><th>Situação</th></tr></thead>
+    <thead>
+      <tr class="header-row"><th colspan="7">
+        <div class="header">
+          <div class="header-top">
+            <img src="${logoUrl}" alt="LM">
+            <div class="title">EFETIVO DE EQUIPAMENTOS LM<small>Gerado em ${new Date().toLocaleDateString("pt-BR")}</small></div>
+            <img class="logo-pdca" src="${logoPdcaUrl}" alt="PDCA">
+          </div>
+          <div class="stats">
+            <div><b>Total de equipamentos</b> ${total} &nbsp; <b>Próprios</b> ${proprios} &nbsp; <b>Locados</b> ${locados} &nbsp; <b>Em manutenção</b> ${manutencao}</div>
+            <div><b>% Próprios</b> ${pct(proprios)}% &nbsp; <b>% Locados</b> ${pct(locados)}% &nbsp; <b>Inativo</b> ${inativo} &nbsp; <b>Em operação</b> ${ativo}</div>
+          </div>
+        </div>
+      </th></tr>
+      <tr class="colhead-row"><th>Obra</th><th>Tipo</th><th>Operador</th><th>Marca</th><th>Modelo</th><th>Locação</th><th>Situação</th></tr>
+    </thead>
     <tbody>${tableRows}</tbody>
   </table>
   <h2>Resumo por tipo de equipamento</h2>
   <table>
     <colgroup><col style="width:40%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:15%"></colgroup>
-    <thead><tr><th>Nome do equipamento</th><th>Ativo</th><th>Manutenção</th><th>Inativo</th><th>Total Geral</th></tr></thead>
+    <thead><tr class="colhead-row"><th>Nome do equipamento</th><th>Ativo</th><th>Manutenção</th><th>Inativo</th><th>Total Geral</th></tr></thead>
     <tbody>${resumoRows}<tr class="tot"><td><strong>Total Geral</strong></td><td><strong>${ativo}</strong></td><td><strong>${manutencao}</strong></td><td><strong>${inativo}</strong></td><td><strong>${total}</strong></td></tr></tbody>
   </table>
   <button class="no-print" onclick="window.print()" style="padding:10px 16px;font-size:13px;cursor:pointer;">Imprimir / Salvar PDF</button>
@@ -1687,6 +1776,171 @@ function gerarRelatorioPDF() {
 }
 
 document.getElementById("btn-relatorio-pdf").addEventListener("click", gerarRelatorioPDF);
+
+/* -------------------------------------------------------------------------
+   MÃO DE OBRA — RELATÓRIO (Folha x Efetivo)
+   ------------------------------------------------------------------------- */
+function buildFolhaEfetivoPivot() {
+  const all = STATE.colaboradores;
+  const obraKeys = Object.keys(STATE.obras).length
+    ? Object.values(STATE.obras).map(o => o.nome).sort((a, b) => a.localeCompare(b))
+    : [...new Set(all.map(w => w.obra || "SEM OBRA"))].sort((a, b) => a.localeCompare(b));
+  const pivot = {};
+  CLASSIF_LABELS.forEach(label => { pivot[label] = {}; obraKeys.forEach(o => pivot[label][o] = 0); });
+  all.forEach(w => {
+    const label = CLASSIF_LABELS.includes((w.classificacao || "").toUpperCase()) ? (w.classificacao || "").toUpperCase() : null;
+    if (!label) return;
+    const obra = w.obra || "SEM OBRA";
+    pivot[label][obra] = (pivot[label][obra] || 0) + 1;
+  });
+  return { obraKeys, pivot };
+}
+
+function renderRelatorioMaoDeObra() {
+  const all = STATE.colaboradores;
+  document.getElementById("relmo-total").textContent = all.length;
+  document.getElementById("relmo-ativos").textContent = all.filter(w => statusClass(w.status) === "st-ativo").length;
+  document.getElementById("relmo-inativos").textContent = all.filter(w => statusClass(w.status) !== "st-ativo").length;
+
+  const { obraKeys, pivot } = buildFolhaEfetivoPivot();
+  document.getElementById("relmo-folha-head").innerHTML = `<th>Classificação</th>${obraKeys.map(o => `<th>${escapeHtml(o)}</th>`).join("")}<th>Total</th>`;
+  const bodyRows = CLASSIF_LABELS.map(label => {
+    const rowTotal = obraKeys.reduce((s, o) => s + (pivot[label][o] || 0), 0);
+    return `<tr><td data-label="Classificação"><strong>${escapeHtml(label)}</strong></td>${obraKeys.map(o => `<td data-label="${escapeHtml(o)}">${pivot[label][o] || ""}</td>`).join("")}<td data-label="Total"><strong>${rowTotal}</strong></td></tr>`;
+  }).join("");
+  const grandTotalPerObra = obraKeys.map(o => CLASSIF_LABELS.reduce((s, label) => s + (pivot[label][o] || 0), 0));
+  const grandTotal = grandTotalPerObra.reduce((a, b) => a + b, 0);
+  const totalRow = `<tr class="tot"><td data-label="Classificação"><strong>TOTAL</strong></td>${grandTotalPerObra.map((n, i) => `<td data-label="${escapeHtml(obraKeys[i])}"><strong>${n}</strong></td>`).join("")}<td data-label="Total"><strong>${grandTotal}</strong></td></tr>`;
+  document.getElementById("relmo-folha-efetivo").innerHTML = bodyRows + totalRow || `<tr><td colspan="${obraKeys.length + 2}" class="empty-state">Sem dados ainda.</td></tr>`;
+
+  const porObra = {};
+  obraKeys.forEach(o => porObra[o] = { ativo: 0, inativo: 0, total: 0 });
+  all.forEach(w => {
+    const k = w.obra || "SEM OBRA";
+    porObra[k] ||= { ativo: 0, inativo: 0, total: 0 };
+    if (statusClass(w.status) === "st-ativo") porObra[k].ativo++;
+    else porObra[k].inativo++;
+    porObra[k].total++;
+  });
+  document.getElementById("relmo-por-obra").innerHTML = Object.entries(porObra)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([obra, c]) => `<tr><td data-label="Obra"><span class="obra-tag">${escapeHtml(obra)}</span></td><td data-label="Ativo">${c.ativo}</td><td data-label="Fora de operação">${c.inativo}</td><td data-label="Total"><strong>${c.total}</strong></td></tr>`)
+    .join("") || `<tr><td colspan="4" class="empty-state">Sem dados ainda.</td></tr>`;
+}
+
+/* -------------------------------------------------------------------------
+   MÃO DE OBRA — RELATÓRIO PDF (padrão "EFETIVO DE MÃO DE OBRA CONSOLIDADO LM")
+   ------------------------------------------------------------------------- */
+function gerarRelatorioMaoDeObraPDF() {
+  if (!requireUnlock()) return;
+  const all = STATE.colaboradores;
+  const { obraKeys, pivot } = buildFolhaEfetivoPivot();
+
+  const byObra = {};
+  all.forEach(w => { (byObra[w.obra || "SEM OBRA"] ||= []).push(w); });
+  const listaObras = Object.keys(byObra).sort((a, b) => a.localeCompare(b));
+
+  const statusColor = (s) => {
+    const cls = statusClass(s);
+    if (cls === "st-ativo") return "color:#0B83B2;font-weight:700;";
+    if (cls === "st-ferias" || cls === "st-mob") return "color:#B45309;font-weight:700;";
+    if (cls === "st-saida" || cls === "st-afastado") return "color:#DC2626;font-weight:700;";
+    return "";
+  };
+
+  let tableRows = "";
+  listaObras.forEach(obra => {
+    const items = byObra[obra].slice().sort((a, b) => (a.funcao || "").localeCompare(b.funcao || ""));
+    tableRows += `<tr class="grp"><td colspan="5">${escapeHtml(obra)}</td></tr>`;
+    items.forEach(w => {
+      tableRows += `<tr>
+        <td>${escapeHtml(w.funcao || "")}</td>
+        <td>${escapeHtml(w.nome || "")}</td>
+        <td>${escapeHtml(w.fornecedor || "")}</td>
+        <td style="${statusColor(w.status)}">${escapeHtml(w.status || "")}</td>
+        <td>${escapeHtml(w.obs || "")}</td>
+      </tr>`;
+    });
+    tableRows += `<tr class="tot"><td colspan="4"><strong>TOTAL DE COLABORADORES</strong></td><td><strong>${items.length}</strong></td></tr>`;
+  });
+
+  const pivotHead = `<th>Classificação</th>${obraKeys.map(o => `<th>${escapeHtml(o)}</th>`).join("")}<th>Total</th>`;
+  const pivotRows = CLASSIF_LABELS.map(label => {
+    const rowTotal = obraKeys.reduce((s, o) => s + (pivot[label][o] || 0), 0);
+    return `<tr><td><strong>${escapeHtml(label)}</strong></td>${obraKeys.map(o => `<td>${pivot[label][o] || ""}</td>`).join("")}<td><strong>${rowTotal}</strong></td></tr>`;
+  }).join("");
+  const grandTotalPerObra = obraKeys.map(o => CLASSIF_LABELS.reduce((s, label) => s + (pivot[label][o] || 0), 0));
+  const grandTotal = grandTotalPerObra.reduce((a, b) => a + b, 0);
+  const pivotTotalRow = `<tr class="tot"><td><strong>TOTAL</strong></td>${grandTotalPerObra.map(n => `<td><strong>${n}</strong></td>`).join("")}<td><strong>${grandTotal}</strong></td></tr>`;
+
+  const logoUrl = new URL("logo-lm.png", location.href).href;
+  const logoPdcaUrl = new URL("logo-pdca.svg", location.href).href;
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Efetivo de Mão de Obra LM</title>
+<style>
+  *{box-sizing:border-box;}
+  html,body{width:100%;}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;margin:0;padding:10px;}
+  .header{border:2px solid #111;padding:10px 14px;background:#fff;}
+  .header-top{display:flex;align-items:center;gap:14px;margin-bottom:8px;}
+  .header img{width:48px;flex-shrink:0;}
+  .header img.logo-pdca{width:56px;}
+  .header .title{font-size:15px;font-weight:800;text-align:center;flex:1;}
+  .header .title small{display:block;font-size:10px;font-weight:400;margin-top:4px;}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px;table-layout:fixed;}
+  th,td{border:1px solid #999;padding:4px 5px;font-size:10px;text-align:left;overflow-wrap:break-word;line-height:1.3;}
+  thead{display:table-header-group;}
+  thead .header-row th{padding:0;border:none;background:none;}
+  thead .colhead-row th{background:#0B83B2;color:#fff;text-transform:uppercase;font-size:9.5px;white-space:nowrap;}
+  .pivot-wrap{padding:8px 14px 10px;}
+  .pivot-wrap table{margin-bottom:0;}
+  .pivot-wrap th{background:#0B83B2;color:#fff;font-size:9px;white-space:nowrap;}
+  .pivot-wrap td{font-size:9px;text-align:center;}
+  .pivot-wrap td:first-child{text-align:left;}
+  tr{page-break-inside:avoid;}
+  tr.grp{page-break-after:avoid;}
+  tr.grp td{background:#DCEEF6;font-weight:800;text-align:center;}
+  tr.tot td{background:#EDEFF2;}
+  .no-print{margin-top:10px;}
+  @media print{
+    .no-print{display:none;}
+    @page{size:A4 portrait;margin:10mm;}
+  }
+</style>
+</head>
+<body>
+  <table>
+    <colgroup>
+      <col style="width:20%"><col style="width:28%"><col style="width:18%"><col style="width:16%"><col style="width:18%">
+    </colgroup>
+    <thead>
+      <tr class="header-row"><th colspan="5">
+        <div class="header">
+          <div class="header-top">
+            <img src="${logoUrl}" alt="LM">
+            <div class="title">EFETIVO DE MÃO DE OBRA CONSOLIDADO LM<small>Gerado em ${new Date().toLocaleDateString("pt-BR")}</small></div>
+            <img class="logo-pdca" src="${logoPdcaUrl}" alt="PDCA">
+          </div>
+        </div>
+        <div class="pivot-wrap">
+          <table><thead><tr>${pivotHead}</tr></thead><tbody>${pivotRows}${pivotTotalRow}</tbody></table>
+        </div>
+      </th></tr>
+      <tr class="colhead-row"><th>Função</th><th>Nome</th><th>Tipo / Fornecedor</th><th>Status</th><th>Observação</th></tr>
+    </thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+  <button class="no-print" onclick="window.print()" style="padding:10px 16px;font-size:13px;cursor:pointer;">Imprimir / Salvar PDF</button>
+</body></html>`;
+
+  const win = window.open("", "_blank");
+  if (!win) { toast("Seu navegador bloqueou a janela do relatório. Permita pop-ups para este site.", true); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => { win.focus(); win.print(); }, 400);
+}
+
+document.getElementById("btn-relatorio-pdf-mo").addEventListener("click", gerarRelatorioMaoDeObraPDF);
 
 function toggleEquipManutencaoBox() {
   const isManutencao = document.getElementById("eqf-situacao").value === "MANUTENÇÃO";
@@ -2136,9 +2390,7 @@ document.getElementById("btn-confirm-import").addEventListener("click", async ()
 /* -------------------------------------------------------------------------
    EXPORTAR EXCEL
    ------------------------------------------------------------------------- */
-document.getElementById("btn-export").addEventListener("click", () => {
-  if (!requireUnlock()) return;
-  if (currentModule === "equipamentos") {
+function exportEquipamentosExcel() {
     const rows = [["OBRA","TIPO","OPERADOR","MARCA","MODELO","PROPRIETÁRIO/LOCADOR","LOCAÇÃO","VALOR","TAG/PATRIMONIO","RENAVAM","CHASSIS/N.º SERIE","ANO","PLACA","SITUAÇÃO","HORÍMETRO ATUAL","HORÍMETRO MANUTENÇÃO","MOTIVO MANUTENÇÃO","PREVISÃO DEVOLUÇÃO","OBRA (COD. SIENGE)","FRENTE SERVIÇO","OBS."]];
     const byObra = {};
     EQUIP_STATE.equipamentos.forEach(w => { (byObra[w.obra || "SEM OBRA"] ||= []).push(w); });
@@ -2152,8 +2404,9 @@ document.getElementById("btn-export").addEventListener("click", () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Equipamentos");
     XLSX.writeFile(wb, `consolidado-equipamentos-${new Date().toISOString().slice(0,10)}.xlsx`);
-    return;
-  }
+}
+
+function exportMaoDeObraExcel() {
   const rows = [["COD.","OBRA","FUNÇÃO","NÍVEL","NOME","ADMISSÃO","TIPO / FORNECEDOR","OBRA (COD. SIENG)","FRENTE SERVIÇO","STATUS","OBSERVAÇÃO"]];
   const byObra = {};
   STATE.colaboradores.forEach(w => { (byObra[w.obra || "SEM OBRA"] ||= []).push(w); });
@@ -2167,6 +2420,12 @@ document.getElementById("btn-export").addEventListener("click", () => {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Consolidado");
   XLSX.writeFile(wb, `consolidado-mao-de-obra-${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+document.getElementById("btn-export").addEventListener("click", () => {
+  if (!requireUnlock()) return;
+  if (currentModule === "equipamentos") exportEquipamentosExcel();
+  else exportMaoDeObraExcel();
 });
 
 /* -------------------------------------------------------------------------

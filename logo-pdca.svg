@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 260" width="300" height="260">
+  <defs>
+    <style>
+      .letter-out{fill:#bfe4fb;stroke:#0B3C63;stroke-width:6;}
+      .letter-in{fill:#1591D8;stroke:#0B3C63;stroke-width:6;}
+      .arrow{fill:none;stroke-linecap:round;}
+      .arrow-light{stroke:#bfe4fb;}
+      .arrow-dark{stroke:#0B5D9E;}
+    </style>
+  </defs>
+  <!-- top arc (light) to P -->
+  <path class="arrow arrow-light" d="M60,95 A100,80 0 0 1 150,35" stroke-width="26"/>
+  <polygon class="letter-out" points="70,55 108,62 92,100" />
+  <!-- right arc (dark) to D -->
+  <path class="arrow arrow-dark" d="M150,35 A100,80 0 0 1 240,130" stroke-width="26"/>
+  <!-- bottom-right arc (light) to C -->
+  <path class="arrow arrow-light" d="M240,130 A100,80 0 0 1 150,225" stroke-width="26"/>
+  <polygon class="letter-out" points="230,190 195,175 220,145" />
+  <!-- bottom-left arc (dark) to A -->
+  <path class="arrow arrow-dark" d="M150,225 A100,80 0 0 1 60,95" stroke-width="26"/>
+
+  <text x="150" y="45" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="62" class="letter-out">P</text>
+  <text x="252" y="150" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="62" class="letter-out">D</text>
+  <text x="150" y="248" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="62" class="letter-out">C</text>
+  <text x="48" y="150" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="62" class="letter-out">A</text>
+
+  <text x="150" y="150" text-anchor="middle" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="70" class="letter-in">LM</text>
+</svg>
