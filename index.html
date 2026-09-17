@@ -498,6 +498,24 @@
         </div>
         <div class="panel" id="folha-cruzamento-panel" style="display:none;padding:16px 18px;">
           <div id="folha-cruzamento-resumo" style="margin-bottom:12px;font-size:14px;"></div>
+
+          <div id="folha-grupos-panel" style="display:none;margin-bottom:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);">
+            <div style="font-weight:700;margin-bottom:6px;">Equipes / centros de custo não reconhecidos</div>
+            <div style="font-size:13px;color:var(--text-mut,#666);margin-bottom:10px;">
+              Times como "equipe de asfalto" se movem entre obras — atribua abaixo em qual obra cada um está atualmente.
+              Isso fica salvo e pode ser mudado a qualquer momento.
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Centro de custo (folha)</th><th>Pessoas</th><th>Atribuir à obra</th></tr></thead>
+                <tbody id="folha-grupos-body"></tbody>
+              </table>
+            </div>
+            <div style="margin-top:12px;">
+              <button class="btn btn-accent btn-sm" id="btn-salvar-grupos">Salvar atribuições</button>
+            </div>
+          </div>
+
           <div class="table-wrap">
             <table>
               <thead><tr><th>Nome</th><th>Obra (Efetivo)</th><th>Obra (Folha)</th><th>Classificação</th><th>Observação</th></tr></thead>
@@ -1026,6 +1044,28 @@ async function deleteEquipFoto(id) {
   const map = JSON.parse(localStorage.getItem(LS_KEY_EQUIP_FOTOS) || "{}");
   delete map[id];
   localStorage.setItem(LS_KEY_EQUIP_FOTOS, JSON.stringify(map));
+}
+
+/* Mapeamento manual: centro de custo (equipe/frente da folha do RH) -> obra atual.
+   Times como "equipe de asfalto" rodam entre obras, então esse vínculo é
+   ajustável a qualquer momento pelo usuário (não é um de-para fixo). */
+const LS_KEY_FOLHA_OBRA_MAP = "consolidadoFolhaObraMap";
+
+async function getFolhaObraMap() {
+  if (useFirebase) {
+    return withTimeout(async () => {
+      const snap = await fs.getDoc(fs.doc(db, "config", "folhaObraMap"));
+      return snap.exists() ? (snap.data().map || {}) : {};
+    });
+  }
+  return JSON.parse(localStorage.getItem(LS_KEY_FOLHA_OBRA_MAP) || "{}");
+}
+
+async function setFolhaObraMap(map) {
+  if (useFirebase) {
+    return withTimeout(() => fs.setDoc(fs.doc(db, "config", "folhaObraMap"), { map, updatedAt: Date.now() }));
+  }
+  localStorage.setItem(LS_KEY_FOLHA_OBRA_MAP, JSON.stringify(map));
 }
 
 function cryptoId() { return "id-" + Math.random().toString(36).slice(2) + Date.now().toString(36); }
@@ -2040,8 +2080,11 @@ function parseFolhaExcel(rows) {
 }
 
 let pendingCruzamento = null;
+let pendingFolhaRegistros = null;
+let folhaObraMap = {};
 
-function computeCruzamento(folhaRegistros) {
+function computeCruzamento(folhaRegistros, obraMap) {
+  const map = obraMap || {};
   const efetivo = STATE.colaboradores;
   const efetivoPorNome = {};
   efetivo.forEach(w => {
@@ -2057,12 +2100,16 @@ function computeCruzamento(folhaRegistros) {
   const linhas = [];
   const nomesVistos = new Set();
 
+  function obraFolhaResolvida(folhaRec) {
+    return (folhaRec && (map[folhaRec.obra] || folhaRec.obra)) || "";
+  }
+
   function classificar(efetivoRec, folhaRec) {
     const fornecedorPJ = (efetivoRec && efetivoRec.fornecedor && normNome(efetivoRec.fornecedor) !== "LM" && efetivoRec.fornecedor.trim() !== "")
       || (folhaRec && folhaRec.empresa);
     if (fornecedorPJ) return { classificacao: "PJ / TERCERIZADO", obs: `Empresa: ${(folhaRec && folhaRec.empresa) || (efetivoRec && efetivoRec.fornecedor) || ""}` };
     if (efetivoRec && folhaRec) {
-      if (obrasMatch(efetivoRec.obra, folhaRec.obra)) return { classificacao: "FOLHA E EFETIVO", obs: "" };
+      if (obrasMatch(efetivoRec.obra, obraFolhaResolvida(folhaRec))) return { classificacao: "FOLHA E EFETIVO", obs: "" };
       return { classificacao: "FOLHA DIFERENTE", obs: `Efetivo: ${efetivoRec.obra || "—"} / Folha: ${folhaRec.obra || "—"}` };
     }
     if (folhaRec && !efetivoRec) return { classificacao: "APENAS FOLHA", obs: "Não encontrado no efetivo (planilha semanal)" };
@@ -2105,6 +2152,39 @@ function computeCruzamento(folhaRegistros) {
   return linhas;
 }
 
+function renderGruposNaoReconhecidos(folhaRegistros, linhas) {
+  const obrasConhecidas = [...new Set(STATE.colaboradores.map(w => w.obra).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+  // nomes (normalizados) que já bateram (FOLHA E EFETIVO) com alguma obra do efetivo,
+  // usados pra saber se um centro de custo já está "resolvido" o suficiente
+  const nomesResolvidos = new Set(linhas.filter(l => l.classificacao === "FOLHA E EFETIVO").map(l => normNome(l.nome)));
+
+  const porCentro = {};
+  folhaRegistros.forEach(f => {
+    (porCentro[f.obra] ||= []).push(f);
+  });
+
+  const grupos = Object.entries(porCentro)
+    .filter(([centro, regs]) => !regs.every(r => nomesResolvidos.has(normNome(r.nome))))
+    .sort(([, a], [, b]) => b.length - a.length);
+
+  const painel = document.getElementById("folha-grupos-panel");
+  if (!grupos.length) { painel.style.display = "none"; return; }
+  painel.style.display = "";
+
+  document.getElementById("folha-grupos-body").innerHTML = grupos.map(([centro, regs]) => {
+    const atual = folhaObraMap[centro] || "";
+    const opts = [`<option value="">— não atribuir —</option>`]
+      .concat(obrasConhecidas.map(o => `<option value="${escapeHtml(o)}" ${o === atual ? "selected" : ""}>${escapeHtml(o)}</option>`))
+      .join("");
+    return `<tr>
+      <td data-label="Centro de custo">${escapeHtml(centro || "(sem nome)")}</td>
+      <td data-label="Pessoas">${regs.length}</td>
+      <td data-label="Atribuir à obra"><select class="folha-obra-assign" data-centro="${escapeHtml(centro)}">${opts}</select></td>
+    </tr>`;
+  }).join("");
+}
+
 function renderCruzamento(linhas) {
   pendingCruzamento = linhas;
   document.getElementById("folha-cruzamento-panel").style.display = "";
@@ -2125,6 +2205,7 @@ function renderCruzamento(linhas) {
       <td data-label="Observação" style="${warn ? "color:var(--warning);" : ""}">${escapeHtml(l.obs)}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="5" class="empty-state">Nenhum registro para comparar.</td></tr>`;
+  if (pendingFolhaRegistros) renderGruposNaoReconhecidos(pendingFolhaRegistros, linhas);
 }
 
 document.getElementById("btn-import-folha").addEventListener("click", () => {
@@ -2147,7 +2228,9 @@ document.getElementById("file-input-folha").addEventListener("change", async (e)
       toast("Não foi possível identificar colaboradores nessa planilha. Verifique se é a relação do RH por centro de custo.", true);
       return;
     }
-    const linhas = computeCruzamento(registros);
+    pendingFolhaRegistros = registros;
+    folhaObraMap = await getFolhaObraMap();
+    const linhas = computeCruzamento(registros, folhaObraMap);
     renderCruzamento(linhas);
     toast(`Relação do RH lida: ${registros.length} colaborador(es) encontrados.`);
   } catch (err) {
@@ -2155,6 +2238,31 @@ document.getElementById("file-input-folha").addEventListener("change", async (e)
     toast("Erro ao ler a planilha: " + err.message, true);
   } finally {
     btn.disabled = false; btn.textContent = "Importar relação do RH (Excel) e cruzar";
+  }
+});
+
+document.getElementById("btn-salvar-grupos").addEventListener("click", async () => {
+  if (!requireUnlock()) return;
+  if (!pendingFolhaRegistros) return;
+  const btn = document.getElementById("btn-salvar-grupos");
+  btn.disabled = true; btn.textContent = "Salvando...";
+  try {
+    const novoMap = { ...folhaObraMap };
+    document.querySelectorAll(".folha-obra-assign").forEach(sel => {
+      const centro = sel.dataset.centro;
+      if (sel.value) novoMap[centro] = sel.value;
+      else delete novoMap[centro];
+    });
+    await setFolhaObraMap(novoMap);
+    folhaObraMap = novoMap;
+    const linhas = computeCruzamento(pendingFolhaRegistros, folhaObraMap);
+    renderCruzamento(linhas);
+    toast("Atribuições salvas.");
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao salvar atribuições: " + err.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Salvar atribuições";
   }
 });
 
