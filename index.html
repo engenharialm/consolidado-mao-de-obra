@@ -205,16 +205,18 @@
   }
   .gt-btn.active{background:var(--accent);color:#FFFFFF;border-color:var(--accent);}
 
-  .kanban{display:flex;gap:14px;padding:20px 28px 40px;overflow-x:auto;align-items:flex-start;}
+  .kanban{display:flex;gap:12px;padding:14px 28px 30px;overflow-x:auto;align-items:flex-start;}
+  .kanban-wrap{flex-wrap:wrap;}
   .kanban-col{
     background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
-    width:300px;flex-shrink:0;display:flex;flex-direction:column;max-height:calc(100vh - 220px);
+    width:280px;flex-shrink:0;display:flex;flex-direction:column;max-height:calc(100vh - 220px);
   }
+  .kanban-wrap .kanban-col{max-height:380px;}
   .kanban-col.drag-over{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-dim);}
-  .kanban-col-head{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
-  .kanban-col-head h3{font-size:.84rem;font-weight:700;}
-  .kanban-col-head .kc-count{font-size:.72rem;font-weight:700;color:var(--accent);background:var(--accent-dim);padding:2px 8px;border-radius:999px;}
-  .kanban-col-body{padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;flex:1;}
+  .kanban-col-head{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+  .kanban-col-head h3{font-size:.8rem;font-weight:700;}
+  .kanban-col-head .kc-count{font-size:.7rem;font-weight:700;color:var(--accent);background:var(--accent-dim);padding:2px 8px;border-radius:999px;}
+  .kanban-col-body{padding:7px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;flex:1;}
   .kanban-divider{width:28px;flex-shrink:0;align-self:stretch;background:var(--accent-dim);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;max-height:calc(100vh - 220px);}
   .kanban-divider span{writing-mode:vertical-rl;text-orientation:mixed;font-size:.72rem;font-weight:700;color:var(--accent);letter-spacing:.05em;white-space:nowrap;}
   .kanban-card{
@@ -227,6 +229,11 @@
   .kanban-card .kc-marca{color:var(--text-dim);font-size:.74rem;margin-bottom:6px;font-weight:500;}
   .kanban-card .kc-meta{display:flex;flex-wrap:wrap;gap:5px;align-items:center;font-size:.7rem;color:var(--text-dim);}
   .kanban-card .kc-tag{background:#E4ECF2;color:var(--text-dim);padding:3px 8px;border-radius:5px;font-weight:600;}
+  .kanban-card.compact{padding:6px 9px;display:flex;align-items:center;gap:7px;}
+  .kanban-card.compact .kc-tipo{margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.76rem;}
+  .kanban-card.compact .kc-marca{margin:0;flex-shrink:0;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.66rem;}
+  .kanban-card.compact .kc-meta{flex-shrink:0;}
+  .kanban-card.compact .badge{padding:2px 6px;font-size:.62rem;}
   .kanban-card .kc-horimetro{font-size:.72rem;color:var(--text-dim);margin-top:6px;font-weight:700;}
   .kanban-card .kc-horimetro.alert{color:var(--danger);}
   .kanban-card .kc-manut-info{font-size:.68rem;color:var(--warning);margin-top:4px;font-style:italic;}
@@ -397,10 +404,15 @@
 
     <!-- QUADRO -->
     <section class="view" id="view-quadro">
-      <div style="padding:14px 28px 0;font-size:13px;color:var(--text-dim);">
-        Arraste um colaborador pra mudar a obra dele. Turmas de asfalto aparecem como um bloco único (com o encarregado em destaque) — arraste o bloco todo pra remanejar a turma inteira de uma vez.
+      <div id="mo-kanban-wrap">
+        <div style="padding:14px 28px 0;font-size:13px;color:var(--text-dim);">
+          Arraste um colaborador pra mudar a obra dele. Turmas de asfalto aparecem como um bloco único (com o encarregado em destaque) — arraste o bloco todo pra remanejar a turma inteira de uma vez.
+        </div>
+        <div class="section-title" style="margin:14px 28px 0;">Por obra</div>
+        <div class="kanban kanban-wrap" id="mo-kanban-obras"></div>
+        <div class="section-title" style="margin:6px 28px 0;">Turmas móveis</div>
+        <div class="kanban" id="mo-kanban-turmas"></div>
       </div>
-      <div class="kanban" id="mo-kanban"></div>
     </section>
 
     <!-- CONSOLIDADO -->
@@ -1365,8 +1377,9 @@ function getFilteredWorkers() {
 function isTurmaLocal(local) { return /ASFALTO/i.test(local || ""); }
 
 function renderMoKanban() {
-  const board = document.getElementById("mo-kanban");
-  if (!board) return;
+  const boardObras = document.getElementById("mo-kanban-obras");
+  const boardTurmas = document.getElementById("mo-kanban-turmas");
+  if (!boardObras || !boardTurmas) return;
   const list = STATE.colaboradores;
   const groups = {};
   list.forEach(w => { const k = w.obra || "SEM OBRA"; (groups[k] ||= []).push(w); });
@@ -1374,7 +1387,8 @@ function renderMoKanban() {
   const allKeys = Object.keys(groups);
 
   if (!list.length) {
-    board.innerHTML = `<div class="empty-state">Nenhum colaborador cadastrado ainda.</div>`;
+    boardObras.innerHTML = `<div class="empty-state">Nenhum colaborador cadastrado ainda.</div>`;
+    boardTurmas.innerHTML = "";
     return;
   }
 
@@ -1404,10 +1418,10 @@ function renderMoKanban() {
         </div>`;
     }).join("");
     const individualCards = individuais.slice().sort((a, b) => (a.nome || "").localeCompare(b.nome || "")).map(w => `
-      <div class="kanban-card" draggable="true" data-id="${w.id}">
+      <div class="kanban-card compact" draggable="true" data-id="${w.id}" title="${escapeHtml(w.nome)} — ${escapeHtml(w.funcao || "—")}">
         <div class="kc-tipo">${escapeHtml(w.nome)}</div>
         <div class="kc-marca">${escapeHtml(w.funcao || "—")}</div>
-        <div class="kc-meta"><span class="badge ${statusClass(w.status)}">${escapeHtml(w.status || "—")}</span></div>
+        <span class="badge ${statusClass(w.status)}">${escapeHtml((w.status || "—").slice(0, 3))}</span>
       </div>`).join("");
     return turmaCards + individualCards || `<div class="empty-state" style="padding:24px 10px;font-size:.72rem;">Vazio</div>`;
   };
@@ -1420,9 +1434,8 @@ function renderMoKanban() {
       </div>
     </div>`;
 
-  board.innerHTML =
-    obraKeys.map(renderCol).join("") +
-    (turmaKeys.length ? `<div class="kanban-divider"><span>TURMAS MÓVEIS</span></div>` + turmaKeys.map(renderCol).join("") : "");
+  boardObras.innerHTML = obraKeys.map(renderCol).join("");
+  boardTurmas.innerHTML = turmaKeys.map(renderCol).join("");
 
   wireMoDragDrop();
 }
@@ -1443,7 +1456,7 @@ function openTurmaModal(localKey) {
 }
 
 function wireMoDragDrop() {
-  document.querySelectorAll("#mo-kanban .kanban-card[data-id]").forEach(card => {
+  document.querySelectorAll("#mo-kanban-wrap .kanban-card[data-id]").forEach(card => {
     card.addEventListener("dragstart", (e) => {
       card.classList.add("dragging");
       e.dataTransfer.setData("text/plain", JSON.stringify({ type: "colaborador", id: card.dataset.id }));
@@ -1454,7 +1467,7 @@ function wireMoDragDrop() {
       if (item) openWorkerModal(item);
     });
   });
-  document.querySelectorAll("#mo-kanban .kanban-card[data-turma]").forEach(card => {
+  document.querySelectorAll("#mo-kanban-wrap .kanban-card[data-turma]").forEach(card => {
     card.addEventListener("dragstart", (e) => {
       card.classList.add("dragging");
       e.dataTransfer.setData("text/plain", JSON.stringify({ type: "turma", local: card.dataset.turma }));
@@ -1462,7 +1475,7 @@ function wireMoDragDrop() {
     card.addEventListener("dragend", () => card.classList.remove("dragging"));
     card.addEventListener("click", () => openTurmaModal(card.dataset.turma));
   });
-  document.querySelectorAll("#mo-kanban .kanban-col-body").forEach(col => {
+  document.querySelectorAll("#mo-kanban-wrap .kanban-col-body").forEach(col => {
     col.addEventListener("dragover", (e) => { e.preventDefault(); col.closest(".kanban-col").classList.add("drag-over"); });
     col.addEventListener("dragleave", () => col.closest(".kanban-col").classList.remove("drag-over"));
     col.addEventListener("drop", async (e) => {
