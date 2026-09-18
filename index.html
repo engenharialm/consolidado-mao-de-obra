@@ -1357,8 +1357,12 @@ function getFilteredWorkers() {
 
 /* -------------------------------------------------------------------------
    MÃO DE OBRA — QUADRO (arrastar colaborador / turma entre obras)
+   A identidade da turma é o campo "local" (centro de custo original da
+   folha do RH), não a obra atual — assim, mesmo depois de arrastada pra
+   dentro de uma obra real, a turma continua reconhecível e pode ser
+   arrastada de novo (o encarregado é o ponto de referência do bloco).
    ------------------------------------------------------------------------- */
-function isTurmaMovel(obra) { return /ASFALTO/i.test(obra || ""); }
+function isTurmaLocal(local) { return /ASFALTO/i.test(local || ""); }
 
 function renderMoKanban() {
   const board = document.getElementById("mo-kanban");
@@ -1373,55 +1377,63 @@ function renderMoKanban() {
     return;
   }
 
-  const obraKeys = allKeys.filter(k => !isTurmaMovel(k)).sort((a, b) => a.localeCompare(b));
-  const turmaKeys = allKeys.filter(k => isTurmaMovel(k)).sort((a, b) => a.localeCompare(b));
-
-  const renderObraCol = (k) => {
-    const items = groups[k].slice().sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
-    return `
-      <div class="kanban-col">
-        <div class="kanban-col-head"><h3>${escapeHtml(k)}</h3><span class="kc-count">${items.length}</span></div>
-        <div class="kanban-col-body" data-group="${escapeHtml(k)}">
-          ${items.map(w => `
-            <div class="kanban-card" draggable="true" data-id="${w.id}">
-              <div class="kc-tipo">${escapeHtml(w.nome)}</div>
-              <div class="kc-marca">${escapeHtml(w.funcao || "—")}</div>
-              <div class="kc-meta"><span class="badge ${statusClass(w.status)}">${escapeHtml(w.status || "—")}</span></div>
-            </div>
-          `).join("") || `<div class="empty-state" style="padding:24px 10px;font-size:.72rem;">Vazio</div>`}
-        </div>
-      </div>`;
-  };
-
-  const renderTurmaCol = (k) => {
+  // coluna "pura" = todo mundo nela pertence à mesma turma móvel (ainda não remanejada pra obra real)
+  const isColunaTurmaPura = (k) => {
     const items = groups[k];
-    const encarregado = items.find(w => (w.funcao || "").toUpperCase().includes("ENCARREGADO"));
-    return `
-      <div class="kanban-col">
-        <div class="kanban-col-head"><h3>${escapeHtml(k)}</h3><span class="kc-count">${items.length}</span></div>
-        <div class="kanban-col-body" data-group="${escapeHtml(k)}">
-          <div class="kanban-card" draggable="true" data-turma="${escapeHtml(k)}" style="border:1.5px dashed var(--accent);">
-            <div class="kc-tipo">👷 ${escapeHtml(encarregado ? encarregado.nome : k)}</div>
-            <div class="kc-marca">${encarregado ? "Encarregado da turma · " : ""}${items.length} pessoa(s)</div>
-            <div class="kc-meta"><span class="kc-tag">Clique pra ver a equipe · arraste pra remanejar</span></div>
-          </div>
-        </div>
-      </div>`;
+    return items.length > 0 && items.every(w => isTurmaLocal(w.local) && w.local === items[0].local);
   };
+
+  const obraKeys = allKeys.filter(k => !isColunaTurmaPura(k)).sort((a, b) => a.localeCompare(b));
+  const turmaKeys = allKeys.filter(k => isColunaTurmaPura(k)).sort((a, b) => a.localeCompare(b));
+
+  const cardsHtml = (items) => {
+    const porTurma = {};
+    const individuais = [];
+    items.forEach(w => {
+      if (isTurmaLocal(w.local)) (porTurma[w.local] ||= []).push(w);
+      else individuais.push(w);
+    });
+    const turmaCards = Object.entries(porTurma).map(([localKey, membros]) => {
+      const encarregado = membros.find(w => (w.funcao || "").toUpperCase().includes("ENCARREGADO"));
+      return `
+        <div class="kanban-card" draggable="true" data-turma="${escapeHtml(localKey)}" style="border:1.5px dashed var(--accent);">
+          <div class="kc-tipo">👷 ${escapeHtml(encarregado ? encarregado.nome : localKey)}</div>
+          <div class="kc-marca">${encarregado ? "Encarregado da turma · " : ""}${membros.length} pessoa(s)</div>
+          <div class="kc-meta"><span class="kc-tag">Clique pra ver a equipe · arraste pra remanejar</span></div>
+        </div>`;
+    }).join("");
+    const individualCards = individuais.slice().sort((a, b) => (a.nome || "").localeCompare(b.nome || "")).map(w => `
+      <div class="kanban-card" draggable="true" data-id="${w.id}">
+        <div class="kc-tipo">${escapeHtml(w.nome)}</div>
+        <div class="kc-marca">${escapeHtml(w.funcao || "—")}</div>
+        <div class="kc-meta"><span class="badge ${statusClass(w.status)}">${escapeHtml(w.status || "—")}</span></div>
+      </div>`).join("");
+    return turmaCards + individualCards || `<div class="empty-state" style="padding:24px 10px;font-size:.72rem;">Vazio</div>`;
+  };
+
+  const renderCol = (k) => `
+    <div class="kanban-col">
+      <div class="kanban-col-head"><h3>${escapeHtml(k)}</h3><span class="kc-count">${groups[k].length}</span></div>
+      <div class="kanban-col-body" data-group="${escapeHtml(k)}">
+        ${cardsHtml(groups[k])}
+      </div>
+    </div>`;
 
   board.innerHTML =
-    obraKeys.map(renderObraCol).join("") +
-    (turmaKeys.length ? `<div class="kanban-divider"><span>TURMAS MÓVEIS</span></div>` + turmaKeys.map(renderTurmaCol).join("") : "");
+    obraKeys.map(renderCol).join("") +
+    (turmaKeys.length ? `<div class="kanban-divider"><span>TURMAS MÓVEIS</span></div>` + turmaKeys.map(renderCol).join("") : "");
 
   wireMoDragDrop();
 }
 
-function openTurmaModal(obra) {
-  const membros = STATE.colaboradores.filter(w => (w.obra || "SEM OBRA") === obra).sort((a, b) => a.nome.localeCompare(b.nome));
+function openTurmaModal(localKey) {
+  const membros = STATE.colaboradores.filter(w => w.local === localKey).sort((a, b) => a.nome.localeCompare(b.nome));
   const encarregado = membros.find(w => (w.funcao || "").toUpperCase().includes("ENCARREGADO"));
   const resto = membros.filter(w => w !== encarregado);
-  document.getElementById("turma-modal-title").textContent = obra;
+  const obraAtual = membros[0]?.obra || "—";
+  document.getElementById("turma-modal-title").textContent = localKey;
   document.getElementById("turma-modal-body").innerHTML = `
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">Obra atual: <strong>${escapeHtml(obraAtual)}</strong></div>
     ${encarregado ? `<div style="padding:10px 12px;border-radius:8px;background:var(--accent-dim);margin-bottom:10px;"><strong>${escapeHtml(encarregado.nome)}</strong><div style="font-size:12px;color:var(--text-dim);">Encarregado · ${escapeHtml(encarregado.funcao || "")}</div></div>` : ""}
     <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">${resto.length} pessoa(s) na equipe</div>
     ${resto.map(w => `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">${escapeHtml(w.nome)} <span style="color:var(--text-dim);">— ${escapeHtml(w.funcao || "—")}</span></div>`).join("") || `<div class="empty-state">Sem outros membros.</div>`}
@@ -1444,7 +1456,7 @@ function wireMoDragDrop() {
   document.querySelectorAll("#mo-kanban .kanban-card[data-turma]").forEach(card => {
     card.addEventListener("dragstart", (e) => {
       card.classList.add("dragging");
-      e.dataTransfer.setData("text/plain", JSON.stringify({ type: "turma", obra: card.dataset.turma }));
+      e.dataTransfer.setData("text/plain", JSON.stringify({ type: "turma", local: card.dataset.turma }));
     });
     card.addEventListener("dragend", () => card.classList.remove("dragging"));
     card.addEventListener("click", () => openTurmaModal(card.dataset.turma));
@@ -1461,13 +1473,13 @@ function wireMoDragDrop() {
       if (!payload || !requireUnlock()) return;
 
       if (payload.type === "turma") {
-        if (payload.obra === group) return;
-        const membros = STATE.colaboradores.filter(w => (w.obra || "SEM OBRA") === payload.obra);
+        const membros = STATE.colaboradores.filter(w => w.local === payload.local);
         if (!membros.length) return;
-        if (!confirm(`Mover a turma "${payload.obra}" (${membros.length} pessoa(s)) para "${group}"?`)) return;
+        if (membros[0].obra === group) return;
+        if (!confirm(`Mover a turma "${payload.local}" (${membros.length} pessoa(s)) para "${group}"?`)) return;
         try {
           await Store.bulkSetObra(membros.map(w => w.id), group);
-          toast(`Turma "${payload.obra}" movida para ${group}.`);
+          toast(`Turma "${payload.local}" movida para ${group}.`);
           await reload();
         } catch (err) {
           toast("Erro ao mover turma: " + err.message, true);
