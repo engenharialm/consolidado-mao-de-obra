@@ -215,6 +215,8 @@
   .kanban-col-head h3{font-size:.84rem;font-weight:700;}
   .kanban-col-head .kc-count{font-size:.72rem;font-weight:700;color:var(--accent);background:var(--accent-dim);padding:2px 8px;border-radius:999px;}
   .kanban-col-body{padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;flex:1;}
+  .kanban-divider{width:28px;flex-shrink:0;align-self:stretch;background:var(--accent-dim);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;max-height:calc(100vh - 220px);}
+  .kanban-divider span{writing-mode:vertical-rl;text-orientation:mixed;font-size:.72rem;font-weight:700;color:var(--accent);letter-spacing:.05em;white-space:nowrap;}
   .kanban-card{
     background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;
     padding:10px 12px;cursor:grab;font-size:.78rem;
@@ -690,6 +692,22 @@
     <div class="modal-foot">
       <button class="btn btn-ghost" data-close>Cancelar</button>
       <button class="btn btn-accent" id="btn-save-worker">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: VER EQUIPE (turma móvel) -->
+<div class="modal-backdrop" id="modal-turma">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="turma-modal-title">Equipe</h2>
+      <button class="modal-close" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="turma-modal-body"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close>Fechar</button>
     </div>
   </div>
 </div>
@@ -1348,35 +1366,23 @@ function renderMoKanban() {
   const list = STATE.colaboradores;
   const groups = {};
   list.forEach(w => { const k = w.obra || "SEM OBRA"; (groups[k] ||= []).push(w); });
-  const keys = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+  const allKeys = Object.keys(groups);
 
-  if (!keys.length) {
+  if (!allKeys.length) {
     board.innerHTML = `<div class="empty-state">Nenhum colaborador cadastrado ainda.</div>`;
     return;
   }
 
-  board.innerHTML = keys.map(k => {
-    const items = groups[k];
-    if (isTurmaMovel(k)) {
-      const encarregado = items.find(w => (w.funcao || "").toUpperCase().includes("ENCARREGADO"));
-      return `
-        <div class="kanban-col">
-          <div class="kanban-col-head"><h3>${escapeHtml(k)}</h3><span class="kc-count">${items.length}</span></div>
-          <div class="kanban-col-body" data-group="${escapeHtml(k)}">
-            <div class="kanban-card" draggable="true" data-turma="${escapeHtml(k)}" style="border:1.5px dashed var(--accent);">
-              <div class="kc-tipo">👷 ${escapeHtml(encarregado ? encarregado.nome : k)}</div>
-              <div class="kc-marca">${encarregado ? "Encarregado da turma · " : ""}${items.length} pessoa(s)</div>
-              <div class="kc-meta"><span class="kc-tag">Turma móvel — arraste o bloco</span></div>
-            </div>
-          </div>
-        </div>`;
-    }
-    const sorted = items.slice().sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+  const obraKeys = allKeys.filter(k => !isTurmaMovel(k)).sort((a, b) => a.localeCompare(b));
+  const turmaKeys = allKeys.filter(k => isTurmaMovel(k)).sort((a, b) => a.localeCompare(b));
+
+  const renderObraCol = (k) => {
+    const items = groups[k].slice().sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
     return `
       <div class="kanban-col">
         <div class="kanban-col-head"><h3>${escapeHtml(k)}</h3><span class="kc-count">${items.length}</span></div>
         <div class="kanban-col-body" data-group="${escapeHtml(k)}">
-          ${sorted.map(w => `
+          ${items.map(w => `
             <div class="kanban-card" draggable="true" data-id="${w.id}">
               <div class="kc-tipo">${escapeHtml(w.nome)}</div>
               <div class="kc-marca">${escapeHtml(w.funcao || "—")}</div>
@@ -1385,9 +1391,42 @@ function renderMoKanban() {
           `).join("") || `<div class="empty-state" style="padding:24px 10px;font-size:.72rem;">Vazio</div>`}
         </div>
       </div>`;
-  }).join("");
+  };
+
+  const renderTurmaCol = (k) => {
+    const items = groups[k];
+    const encarregado = items.find(w => (w.funcao || "").toUpperCase().includes("ENCARREGADO"));
+    return `
+      <div class="kanban-col">
+        <div class="kanban-col-head"><h3>${escapeHtml(k)}</h3><span class="kc-count">${items.length}</span></div>
+        <div class="kanban-col-body" data-group="${escapeHtml(k)}">
+          <div class="kanban-card" draggable="true" data-turma="${escapeHtml(k)}" style="border:1.5px dashed var(--accent);">
+            <div class="kc-tipo">👷 ${escapeHtml(encarregado ? encarregado.nome : k)}</div>
+            <div class="kc-marca">${encarregado ? "Encarregado da turma · " : ""}${items.length} pessoa(s)</div>
+            <div class="kc-meta"><span class="kc-tag">Clique pra ver a equipe · arraste pra remanejar</span></div>
+          </div>
+        </div>
+      </div>`;
+  };
+
+  board.innerHTML =
+    obraKeys.map(renderObraCol).join("") +
+    (turmaKeys.length ? `<div class="kanban-divider"><span>TURMAS MÓVEIS</span></div>` + turmaKeys.map(renderTurmaCol).join("") : "");
 
   wireMoDragDrop();
+}
+
+function openTurmaModal(obra) {
+  const membros = STATE.colaboradores.filter(w => (w.obra || "SEM OBRA") === obra).sort((a, b) => a.nome.localeCompare(b.nome));
+  const encarregado = membros.find(w => (w.funcao || "").toUpperCase().includes("ENCARREGADO"));
+  const resto = membros.filter(w => w !== encarregado);
+  document.getElementById("turma-modal-title").textContent = obra;
+  document.getElementById("turma-modal-body").innerHTML = `
+    ${encarregado ? `<div style="padding:10px 12px;border-radius:8px;background:var(--accent-dim);margin-bottom:10px;"><strong>${escapeHtml(encarregado.nome)}</strong><div style="font-size:12px;color:var(--text-dim);">Encarregado · ${escapeHtml(encarregado.funcao || "")}</div></div>` : ""}
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">${resto.length} pessoa(s) na equipe</div>
+    ${resto.map(w => `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">${escapeHtml(w.nome)} <span style="color:var(--text-dim);">— ${escapeHtml(w.funcao || "—")}</span></div>`).join("") || `<div class="empty-state">Sem outros membros.</div>`}
+  `;
+  document.getElementById("modal-turma").classList.add("open");
 }
 
 function wireMoDragDrop() {
@@ -1408,6 +1447,7 @@ function wireMoDragDrop() {
       e.dataTransfer.setData("text/plain", JSON.stringify({ type: "turma", obra: card.dataset.turma }));
     });
     card.addEventListener("dragend", () => card.classList.remove("dragging"));
+    card.addEventListener("click", () => openTurmaModal(card.dataset.turma));
   });
   document.querySelectorAll("#mo-kanban .kanban-col-body").forEach(col => {
     col.addEventListener("dragover", (e) => { e.preventDefault(); col.closest(".kanban-col").classList.add("drag-over"); });
