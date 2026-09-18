@@ -1370,9 +1370,10 @@ function renderMoKanban() {
   const list = STATE.colaboradores;
   const groups = {};
   list.forEach(w => { const k = w.obra || "SEM OBRA"; (groups[k] ||= []).push(w); });
+  groups["SEM OBRA"] ||= []; // sempre existe como destino pra "soltar" uma turma sem obra atribuída
   const allKeys = Object.keys(groups);
 
-  if (!allKeys.length) {
+  if (!list.length) {
     board.innerHTML = `<div class="empty-state">Nenhum colaborador cadastrado ainda.</div>`;
     return;
   }
@@ -1383,8 +1384,8 @@ function renderMoKanban() {
     return items.length > 0 && items.every(w => isTurmaLocal(w.local) && w.local === items[0].local);
   };
 
-  const obraKeys = allKeys.filter(k => !isColunaTurmaPura(k)).sort((a, b) => a.localeCompare(b));
-  const turmaKeys = allKeys.filter(k => isColunaTurmaPura(k)).sort((a, b) => a.localeCompare(b));
+  const obraKeys = allKeys.filter(k => k !== "SEM OBRA" && !isColunaTurmaPura(k)).sort((a, b) => a.localeCompare(b));
+  const turmaKeys = [...allKeys.filter(k => k !== "SEM OBRA" && isColunaTurmaPura(k)).sort((a, b) => a.localeCompare(b)), "SEM OBRA"];
 
   const cardsHtml = (items) => {
     const porTurma = {};
@@ -1413,7 +1414,7 @@ function renderMoKanban() {
 
   const renderCol = (k) => `
     <div class="kanban-col">
-      <div class="kanban-col-head"><h3>${escapeHtml(k)}</h3><span class="kc-count">${groups[k].length}</span></div>
+      <div class="kanban-col-head"><h3>${k === "SEM OBRA" ? "Sem obra (disponível)" : escapeHtml(k)}</h3><span class="kc-count">${groups[k].length}</span></div>
       <div class="kanban-col-body" data-group="${escapeHtml(k)}">
         ${cardsHtml(groups[k])}
       </div>
