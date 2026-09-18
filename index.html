@@ -364,6 +364,7 @@
   <div id="mo-body">
   <nav class="tabs">
     <button data-view="dashboard" class="active">Dashboard</button>
+    <button data-view="quadro">Quadro</button>
     <button data-view="consolidado">Consolidado</button>
     <button data-view="porobra">Por Obra</button>
     <button data-view="importacoes">Importações</button>
@@ -390,6 +391,14 @@
           <tbody id="dash-obra-table"></tbody>
         </table>
       </div>
+    </section>
+
+    <!-- QUADRO -->
+    <section class="view" id="view-quadro">
+      <div style="padding:14px 28px 0;font-size:13px;color:var(--text-dim);">
+        Arraste um colaborador pra mudar a obra dele. Turmas de asfalto aparecem como um bloco único (com o encarregado em destaque) — arraste o bloco todo pra remanejar a turma inteira de uma vez.
+      </div>
+      <div class="kanban" id="mo-kanban"></div>
     </section>
 
     <!-- CONSOLIDADO -->
@@ -967,6 +976,28 @@ function makeStore({ itemsKey, colName, obrasColName, logColName, lsKey }) {
       }
     },
 
+    // Move vários registros de uma vez pra outra obra (ex.: arrastar uma turma inteira no quadro).
+    async bulkSetObra(ids, obraName) {
+      if (useFirebase) {
+        return withTimeout(async () => {
+          const batches = [];
+          let batch = fs.writeBatch(db);
+          let opCount = 0;
+          for (const id of ids) {
+            batch.update(fs.doc(db, colName, id), { obra: obraName });
+            opCount++;
+            if (opCount >= 450) { batches.push(batch); batch = fs.writeBatch(db); opCount = 0; }
+          }
+          batches.push(batch);
+          for (const b of batches) await b.commit();
+        }, 30000);
+      } else {
+        const data = lsRead(lsKey, itemsKey);
+        data[itemsKey].forEach(c => { if (ids.includes(c.id)) c.obra = obraName; });
+        lsWrite(lsKey, data);
+      }
+    },
+
     async addImportLog(entry) {
       if (useFirebase) {
         return withTimeout(() => fs.addDoc(fs.collection(db, logColName), { ...entry, timestamp: Date.now() }));
@@ -1117,6 +1148,7 @@ async function reloadEquip() {
 function renderAll() {
   renderFilters();
   renderDashboard();
+  renderMoKanban();
   renderConsolidado();
   renderPorObra();
   renderImportacoes();
@@ -1303,6 +1335,118 @@ function getFilteredWorkers() {
     if (funcao && w.funcao !== funcao) return false;
     return true;
   }).sort((a, b) => (a.obra || "").localeCompare(b.obra || "") || (a.nome || "").localeCompare(b.nome || ""));
+}
+
+/* -------------------------------------------------------------------------
+   MÃO DE OBRA — QUADRO (arrastar colaborador / turma entre obras)
+   ------------------------------------------------------------------------- */
+function isTurmaMovel(obra) { return /ASFALTO/i.test(obra || ""); }
+
+function renderMoKanban() {
+  const board = document.getElementById("mo-kanban");
+  if (!board) return;
+  const list = STATE.colaboradores;
+  const groups = {};
+  list.forEach(w => { const k = w.obra || "SEM OBRA"; (groups[k] ||= []).push(w); });
+  const keys = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+
+  if (!keys.length) {
+    board.innerHTML = `<div class="empty-state">Nenhum colaborador cadastrado ainda.</div>`;
+    return;
+  }
+
+  board.innerHTML = keys.map(k => {
+    const items = groups[k];
+    if (isTurmaMovel(k)) {
+      const encarregado = items.find(w => (w.funcao || "").toUpperCase().includes("ENCARREGADO"));
+      return `
+        <div class="kanban-col">
+          <div class="kanban-col-head"><h3>${escapeHtml(k)}</h3><span class="kc-count">${items.length}</span></div>
+          <div class="kanban-col-body" data-group="${escapeHtml(k)}">
+            <div class="kanban-card" draggable="true" data-turma="${escapeHtml(k)}" style="border:1.5px dashed var(--accent);">
+              <div class="kc-tipo">👷 ${escapeHtml(encarregado ? encarregado.nome : k)}</div>
+              <div class="kc-marca">${encarregado ? "Encarregado da turma · " : ""}${items.length} pessoa(s)</div>
+              <div class="kc-meta"><span class="kc-tag">Turma móvel — arraste o bloco</span></div>
+            </div>
+          </div>
+        </div>`;
+    }
+    const sorted = items.slice().sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+    return `
+      <div class="kanban-col">
+        <div class="kanban-col-head"><h3>${escapeHtml(k)}</h3><span class="kc-count">${items.length}</span></div>
+        <div class="kanban-col-body" data-group="${escapeHtml(k)}">
+          ${sorted.map(w => `
+            <div class="kanban-card" draggable="true" data-id="${w.id}">
+              <div class="kc-tipo">${escapeHtml(w.nome)}</div>
+              <div class="kc-marca">${escapeHtml(w.funcao || "—")}</div>
+              <div class="kc-meta"><span class="badge ${statusClass(w.status)}">${escapeHtml(w.status || "—")}</span></div>
+            </div>
+          `).join("") || `<div class="empty-state" style="padding:24px 10px;font-size:.72rem;">Vazio</div>`}
+        </div>
+      </div>`;
+  }).join("");
+
+  wireMoDragDrop();
+}
+
+function wireMoDragDrop() {
+  document.querySelectorAll("#mo-kanban .kanban-card[data-id]").forEach(card => {
+    card.addEventListener("dragstart", (e) => {
+      card.classList.add("dragging");
+      e.dataTransfer.setData("text/plain", JSON.stringify({ type: "colaborador", id: card.dataset.id }));
+    });
+    card.addEventListener("dragend", () => card.classList.remove("dragging"));
+    card.addEventListener("click", () => {
+      const item = STATE.colaboradores.find(w => w.id === card.dataset.id);
+      if (item) openWorkerModal(item);
+    });
+  });
+  document.querySelectorAll("#mo-kanban .kanban-card[data-turma]").forEach(card => {
+    card.addEventListener("dragstart", (e) => {
+      card.classList.add("dragging");
+      e.dataTransfer.setData("text/plain", JSON.stringify({ type: "turma", obra: card.dataset.turma }));
+    });
+    card.addEventListener("dragend", () => card.classList.remove("dragging"));
+  });
+  document.querySelectorAll("#mo-kanban .kanban-col-body").forEach(col => {
+    col.addEventListener("dragover", (e) => { e.preventDefault(); col.closest(".kanban-col").classList.add("drag-over"); });
+    col.addEventListener("dragleave", () => col.closest(".kanban-col").classList.remove("drag-over"));
+    col.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      col.closest(".kanban-col").classList.remove("drag-over");
+      const group = col.dataset.group;
+      let payload;
+      try { payload = JSON.parse(e.dataTransfer.getData("text/plain")); } catch { return; }
+      if (!payload || !requireUnlock()) return;
+
+      if (payload.type === "turma") {
+        if (payload.obra === group) return;
+        const membros = STATE.colaboradores.filter(w => (w.obra || "SEM OBRA") === payload.obra);
+        if (!membros.length) return;
+        if (!confirm(`Mover a turma "${payload.obra}" (${membros.length} pessoa(s)) para "${group}"?`)) return;
+        try {
+          await Store.bulkSetObra(membros.map(w => w.id), group);
+          toast(`Turma "${payload.obra}" movida para ${group}.`);
+          await reload();
+        } catch (err) {
+          toast("Erro ao mover turma: " + err.message, true);
+          await reload();
+        }
+      } else {
+        const item = STATE.colaboradores.find(w => w.id === payload.id);
+        if (!item || (item.obra || "SEM OBRA") === group) return;
+        try {
+          await Store.saveItem({ ...item, obra: group });
+          toast(`${item.nome} movido para ${group}.`);
+          await reload();
+        } catch (err) {
+          toast("Erro ao mover: " + err.message, true);
+          await reload();
+        }
+      }
+    });
+  });
 }
 
 function renderConsolidado() {
