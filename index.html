@@ -512,6 +512,7 @@
       <select id="eq-situacao"><option value="">Todas as situações</option></select>
       <div class="spacer"></div>
       <span class="toolbar-count" id="eq-count"></span>
+      <button class="btn btn-ghost btn-sm" id="btn-gerenciar-obras-equip">Gerenciar obras</button>
       <button class="btn btn-accent btn-sm" id="btn-add-equip">+ Novo equipamento</button>
     </div>
     <div class="equip-toolbar" id="equip-categoria-pills" style="padding-top:0;">
@@ -704,6 +705,26 @@
     <div class="modal-foot">
       <button class="btn btn-ghost" data-close>Cancelar</button>
       <button class="btn btn-accent" id="btn-save-worker">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: GERENCIAR OBRAS (Equipamentos) -->
+<div class="modal-backdrop" id="modal-obras-equip">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Gerenciar obras (Equipamentos)</h2>
+      <button class="modal-close" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="obras-equip-list"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+        <input type="text" id="nova-obra-equip-nome" placeholder="Nome da nova obra" style="flex:1;">
+        <button class="btn btn-accent btn-sm" id="btn-criar-obra-equip">Criar obra vazia</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close>Fechar</button>
     </div>
   </div>
 </div>
@@ -1069,6 +1090,72 @@ function makeStore({ itemsKey, colName, obrasColName, logColName, lsKey }) {
       } else {
         const data = lsRead(lsKey, itemsKey);
         data[itemsKey] = data[itemsKey].filter(c => c.id !== id);
+        lsWrite(lsKey, data);
+      }
+    },
+
+    // Cria uma obra vazia (só aparece como coluna/opção até algo ser registrado nela).
+    async createEmptyObra(obraName) {
+      const slug = slugify(obraName);
+      if (useFirebase) {
+        return withTimeout(() => fs.setDoc(fs.doc(db, obrasColName, slug), { nome: obraName, lastUpdated: Date.now() }, { merge: true }));
+      } else {
+        const data = lsRead(lsKey, itemsKey);
+        data.obras[slug] ||= { nome: obraName, lastUpdated: Date.now() };
+        lsWrite(lsKey, data);
+      }
+    },
+
+    // Renomeia uma obra: move todos os registros pra ela e atualiza o metadado.
+    async renameObra(oldName, newName) {
+      const oldSlug = slugify(oldName), newSlug = slugify(newName);
+      if (useFirebase) {
+        return withTimeout(async () => {
+          const existing = await fs.getDocs(fs.query(fs.collection(db, colName), fs.where("obra", "==", oldName)));
+          let batch = fs.writeBatch(db);
+          let opCount = 0;
+          const batches = [];
+          for (const d of existing.docs) {
+            batch.update(d.ref, { obra: newName });
+            opCount++;
+            if (opCount >= 450) { batches.push(batch); batch = fs.writeBatch(db); opCount = 0; }
+          }
+          batches.push(batch);
+          for (const b of batches) await b.commit();
+          await fs.setDoc(fs.doc(db, obrasColName, newSlug), { nome: newName, lastUpdated: Date.now() }, { merge: true });
+          if (oldSlug !== newSlug) await fs.deleteDoc(fs.doc(db, obrasColName, oldSlug));
+        }, 30000);
+      } else {
+        const data = lsRead(lsKey, itemsKey);
+        data[itemsKey].forEach(c => { if (c.obra === oldName) c.obra = newName; });
+        delete data.obras[oldSlug];
+        data.obras[newSlug] = { nome: newName, lastUpdated: Date.now() };
+        lsWrite(lsKey, data);
+      }
+    },
+
+    // Apaga uma obra inteira: todos os registros nela + o metadado da obra.
+    async deleteObraRecords(obraName) {
+      const slug = slugify(obraName);
+      if (useFirebase) {
+        return withTimeout(async () => {
+          const existing = await fs.getDocs(fs.query(fs.collection(db, colName), fs.where("obra", "==", obraName)));
+          let batch = fs.writeBatch(db);
+          let opCount = 0;
+          const batches = [];
+          for (const d of existing.docs) {
+            batch.delete(d.ref);
+            opCount++;
+            if (opCount >= 450) { batches.push(batch); batch = fs.writeBatch(db); opCount = 0; }
+          }
+          batches.push(batch);
+          for (const b of batches) await b.commit();
+          await fs.deleteDoc(fs.doc(db, obrasColName, slug));
+        }, 30000);
+      } else {
+        const data = lsRead(lsKey, itemsKey);
+        data[itemsKey] = data[itemsKey].filter(c => c.obra !== obraName);
+        delete data.obras[slug];
         lsWrite(lsKey, data);
       }
     }
@@ -2711,6 +2798,81 @@ function openEquipModal(item) {
 }
 
 document.getElementById("btn-add-equip").addEventListener("click", () => openEquipModal(null));
+
+/* -------------------------------------------------------------------------
+   EQUIPAMENTOS — GERENCIAR OBRAS (renomear / criar / excluir)
+   ------------------------------------------------------------------------- */
+function renderObrasEquipModal() {
+  const counts = {};
+  EQUIP_STATE.equipamentos.forEach(w => { counts[w.obra || "SEM OBRA"] = (counts[w.obra || "SEM OBRA"] || 0) + 1; });
+  const nomes = new Set([...Object.values(EQUIP_STATE.obras).map(o => o.nome), ...Object.keys(counts)]);
+  const lista = [...nomes].sort((a, b) => a.localeCompare(b));
+
+  document.getElementById("obras-equip-list").innerHTML = lista.map(nome => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;">
+        <strong>${escapeHtml(nome)}</strong>
+        <span style="color:var(--text-dim);font-size:.8rem;"> · ${counts[nome] || 0} equipamento(s)</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" data-renomear-obra="${escapeHtml(nome)}">Renomear</button>
+      <button class="btn btn-ghost btn-sm" data-excluir-obra="${escapeHtml(nome)}" style="color:var(--danger);">Excluir</button>
+    </div>
+  `).join("") || `<div class="empty-state">Nenhuma obra cadastrada ainda.</div>`;
+
+  document.querySelectorAll("#obras-equip-list [data-renomear-obra]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!requireUnlock()) return;
+      const nomeAtual = btn.dataset.renomearObra;
+      const novoNome = prompt(`Novo nome para a obra "${nomeAtual}":`, nomeAtual);
+      if (!novoNome || !novoNome.trim() || novoNome.trim() === nomeAtual) return;
+      try {
+        await EquipStore.renameObra(nomeAtual, novoNome.trim());
+        toast(`Obra renomeada para "${novoNome.trim()}".`);
+        await reloadEquip();
+        renderObrasEquipModal();
+      } catch (err) {
+        toast("Erro ao renomear: " + err.message, true);
+      }
+    });
+  });
+  document.querySelectorAll("#obras-equip-list [data-excluir-obra]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!requireUnlock()) return;
+      const nome = btn.dataset.excluirObra;
+      const qtd = counts[nome] || 0;
+      if (!confirm(`Excluir a obra "${nome}"${qtd ? ` e os ${qtd} equipamento(s) cadastrados nela` : ""}? Essa ação não pode ser desfeita.`)) return;
+      try {
+        await EquipStore.deleteObraRecords(nome);
+        toast(`Obra "${nome}" excluída.`);
+        await reloadEquip();
+        renderObrasEquipModal();
+      } catch (err) {
+        toast("Erro ao excluir: " + err.message, true);
+      }
+    });
+  });
+}
+
+document.getElementById("btn-gerenciar-obras-equip").addEventListener("click", () => {
+  renderObrasEquipModal();
+  document.getElementById("modal-obras-equip").classList.add("open");
+});
+
+document.getElementById("btn-criar-obra-equip").addEventListener("click", async () => {
+  if (!requireUnlock()) return;
+  const input = document.getElementById("nova-obra-equip-nome");
+  const nome = input.value.trim();
+  if (!nome) { toast("Digite o nome da obra.", true); return; }
+  try {
+    await EquipStore.createEmptyObra(nome);
+    input.value = "";
+    toast(`Obra "${nome}" criada.`);
+    await reloadEquip();
+    renderObrasEquipModal();
+  } catch (err) {
+    toast("Erro ao criar obra: " + err.message, true);
+  }
+});
 
 document.getElementById("btn-save-equip").addEventListener("click", async () => {
   if (!requireUnlock()) return;
