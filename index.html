@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
     /* Identidade visual LM Construtora (baseada no papel timbrado) */
@@ -512,6 +513,8 @@
       <select id="eq-situacao"><option value="">Todas as situações</option></select>
       <div class="spacer"></div>
       <span class="toolbar-count" id="eq-count"></span>
+      <button class="btn btn-ghost btn-sm" id="btn-gerenciar-obras-equip">Gerenciar obras</button>
+      <button class="btn btn-ghost btn-sm" id="btn-importar-fotos-equip">Importar planilha (com fotos)</button>
       <button class="btn btn-accent btn-sm" id="btn-add-equip">+ Novo equipamento</button>
     </div>
     <div class="equip-toolbar" id="equip-categoria-pills" style="padding-top:0;">
@@ -704,6 +707,55 @@
     <div class="modal-foot">
       <button class="btn btn-ghost" data-close>Cancelar</button>
       <button class="btn btn-accent" id="btn-save-worker">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: GERENCIAR OBRAS (Equipamentos) -->
+<div class="modal-backdrop" id="modal-obras-equip">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Gerenciar obras (Equipamentos)</h2>
+      <button class="modal-close" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="obras-equip-list"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+        <input type="text" id="nova-obra-equip-nome" placeholder="Nome da nova obra" style="flex:1;">
+        <button class="btn btn-accent btn-sm" id="btn-criar-obra-equip">Criar obra vazia</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close>Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: IMPORTAR PLANILHA DE EQUIPAMENTOS COM FOTOS -->
+<div class="modal-backdrop" id="modal-import-fotos">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Importar planilha de equipamentos (com fotos)</h2>
+      <button class="modal-close" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field full">
+          <label>Obra desse relatório *</label>
+          <input type="text" id="import-fotos-obra" list="obra-equip-list-datalist" placeholder="Ex.: SJB, LAFAIETE...">
+          <datalist id="obra-equip-list-datalist"></datalist>
+        </div>
+        <div class="field full">
+          <label>Planilha (.xlsx)</label>
+          <input type="file" id="import-fotos-file" accept=".xlsx">
+        </div>
+      </div>
+      <div id="import-fotos-status" style="margin-top:10px;font-size:13px;color:var(--text-dim);"></div>
+      <div id="import-fotos-preview" style="margin-top:10px;"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close>Cancelar</button>
+      <button class="btn btn-accent" id="btn-confirmar-import-fotos" disabled>Confirmar importação</button>
     </div>
   </div>
 </div>
@@ -1069,6 +1121,72 @@ function makeStore({ itemsKey, colName, obrasColName, logColName, lsKey }) {
       } else {
         const data = lsRead(lsKey, itemsKey);
         data[itemsKey] = data[itemsKey].filter(c => c.id !== id);
+        lsWrite(lsKey, data);
+      }
+    },
+
+    // Cria uma obra vazia (só aparece como coluna/opção até algo ser registrado nela).
+    async createEmptyObra(obraName) {
+      const slug = slugify(obraName);
+      if (useFirebase) {
+        return withTimeout(() => fs.setDoc(fs.doc(db, obrasColName, slug), { nome: obraName, lastUpdated: Date.now() }, { merge: true }));
+      } else {
+        const data = lsRead(lsKey, itemsKey);
+        data.obras[slug] ||= { nome: obraName, lastUpdated: Date.now() };
+        lsWrite(lsKey, data);
+      }
+    },
+
+    // Renomeia uma obra: move todos os registros pra ela e atualiza o metadado.
+    async renameObra(oldName, newName) {
+      const oldSlug = slugify(oldName), newSlug = slugify(newName);
+      if (useFirebase) {
+        return withTimeout(async () => {
+          const existing = await fs.getDocs(fs.query(fs.collection(db, colName), fs.where("obra", "==", oldName)));
+          let batch = fs.writeBatch(db);
+          let opCount = 0;
+          const batches = [];
+          for (const d of existing.docs) {
+            batch.update(d.ref, { obra: newName });
+            opCount++;
+            if (opCount >= 450) { batches.push(batch); batch = fs.writeBatch(db); opCount = 0; }
+          }
+          batches.push(batch);
+          for (const b of batches) await b.commit();
+          await fs.setDoc(fs.doc(db, obrasColName, newSlug), { nome: newName, lastUpdated: Date.now() }, { merge: true });
+          if (oldSlug !== newSlug) await fs.deleteDoc(fs.doc(db, obrasColName, oldSlug));
+        }, 30000);
+      } else {
+        const data = lsRead(lsKey, itemsKey);
+        data[itemsKey].forEach(c => { if (c.obra === oldName) c.obra = newName; });
+        delete data.obras[oldSlug];
+        data.obras[newSlug] = { nome: newName, lastUpdated: Date.now() };
+        lsWrite(lsKey, data);
+      }
+    },
+
+    // Apaga uma obra inteira: todos os registros nela + o metadado da obra.
+    async deleteObraRecords(obraName) {
+      const slug = slugify(obraName);
+      if (useFirebase) {
+        return withTimeout(async () => {
+          const existing = await fs.getDocs(fs.query(fs.collection(db, colName), fs.where("obra", "==", obraName)));
+          let batch = fs.writeBatch(db);
+          let opCount = 0;
+          const batches = [];
+          for (const d of existing.docs) {
+            batch.delete(d.ref);
+            opCount++;
+            if (opCount >= 450) { batches.push(batch); batch = fs.writeBatch(db); opCount = 0; }
+          }
+          batches.push(batch);
+          for (const b of batches) await b.commit();
+          await fs.deleteDoc(fs.doc(db, obrasColName, slug));
+        }, 30000);
+      } else {
+        const data = lsRead(lsKey, itemsKey);
+        data[itemsKey] = data[itemsKey].filter(c => c.obra !== obraName);
+        delete data.obras[slug];
         lsWrite(lsKey, data);
       }
     }
@@ -2711,6 +2829,333 @@ function openEquipModal(item) {
 }
 
 document.getElementById("btn-add-equip").addEventListener("click", () => openEquipModal(null));
+
+/* -------------------------------------------------------------------------
+   EQUIPAMENTOS — GERENCIAR OBRAS (renomear / criar / excluir)
+   ------------------------------------------------------------------------- */
+function renderObrasEquipModal() {
+  const counts = {};
+  EQUIP_STATE.equipamentos.forEach(w => { counts[w.obra || "SEM OBRA"] = (counts[w.obra || "SEM OBRA"] || 0) + 1; });
+  const nomes = new Set([...Object.values(EQUIP_STATE.obras).map(o => o.nome), ...Object.keys(counts)]);
+  const lista = [...nomes].sort((a, b) => a.localeCompare(b));
+
+  document.getElementById("obras-equip-list").innerHTML = lista.map(nome => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;">
+        <strong>${escapeHtml(nome)}</strong>
+        <span style="color:var(--text-dim);font-size:.8rem;"> · ${counts[nome] || 0} equipamento(s)</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" data-renomear-obra="${escapeHtml(nome)}">Renomear</button>
+      <button class="btn btn-ghost btn-sm" data-excluir-obra="${escapeHtml(nome)}" style="color:var(--danger);">Excluir</button>
+    </div>
+  `).join("") || `<div class="empty-state">Nenhuma obra cadastrada ainda.</div>`;
+
+  document.querySelectorAll("#obras-equip-list [data-renomear-obra]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!requireUnlock()) return;
+      const nomeAtual = btn.dataset.renomearObra;
+      const novoNome = prompt(`Novo nome para a obra "${nomeAtual}":`, nomeAtual);
+      if (!novoNome || !novoNome.trim() || novoNome.trim() === nomeAtual) return;
+      try {
+        await EquipStore.renameObra(nomeAtual, novoNome.trim());
+        toast(`Obra renomeada para "${novoNome.trim()}".`);
+        await reloadEquip();
+        renderObrasEquipModal();
+      } catch (err) {
+        toast("Erro ao renomear: " + err.message, true);
+      }
+    });
+  });
+  document.querySelectorAll("#obras-equip-list [data-excluir-obra]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!requireUnlock()) return;
+      const nome = btn.dataset.excluirObra;
+      const qtd = counts[nome] || 0;
+      if (!confirm(`Excluir a obra "${nome}"${qtd ? ` e os ${qtd} equipamento(s) cadastrados nela` : ""}? Essa ação não pode ser desfeita.`)) return;
+      try {
+        await EquipStore.deleteObraRecords(nome);
+        toast(`Obra "${nome}" excluída.`);
+        await reloadEquip();
+        renderObrasEquipModal();
+      } catch (err) {
+        toast("Erro ao excluir: " + err.message, true);
+      }
+    });
+  });
+}
+
+document.getElementById("btn-gerenciar-obras-equip").addEventListener("click", () => {
+  renderObrasEquipModal();
+  document.getElementById("modal-obras-equip").classList.add("open");
+});
+
+document.getElementById("btn-criar-obra-equip").addEventListener("click", async () => {
+  if (!requireUnlock()) return;
+  const input = document.getElementById("nova-obra-equip-nome");
+  const nome = input.value.trim();
+  if (!nome) { toast("Digite o nome da obra.", true); return; }
+  try {
+    await EquipStore.createEmptyObra(nome);
+    input.value = "";
+    toast(`Obra "${nome}" criada.`);
+    await reloadEquip();
+    renderObrasEquipModal();
+  } catch (err) {
+    toast("Erro ao criar obra: " + err.message, true);
+  }
+});
+
+/* -------------------------------------------------------------------------
+   EQUIPAMENTOS — IMPORTAR PLANILHA COM FOTOS (imagem-dentro-da-célula do Excel)
+   ------------------------------------------------------------------------- */
+// Lê a cadeia completa de referências do Excel pra achar qual arquivo de mídia
+// corresponde a cada vm="N" de uma célula: metadata.xml -> rdrichvalue.xml ->
+// richValueRel.xml -> richValueRel.xml.rels -> caminho do arquivo em xl/media.
+async function buildVmToMediaMap(zip) {
+  const vmToMedia = {};
+  const metaFile = zip.file("xl/metadata.xml");
+  const rvFile = zip.file("xl/richData/rdrichvalue.xml");
+  const relFile = zip.file("xl/richData/richValueRel.xml");
+  const relRelsFile = zip.file("xl/richData/_rels/richValueRel.xml.rels");
+  if (!metaFile || !rvFile || !relFile || !relRelsFile) return vmToMedia; // planilha sem fotos em célula
+
+  const metaXml = await metaFile.async("string");
+  const bkList = [...metaXml.matchAll(/<xlrd:rvb i="(\d+)"\/>/g)].map(m => parseInt(m[1], 10));
+
+  const rvXml = await rvFile.async("string");
+  const rvBlocks = [...rvXml.matchAll(/<rv s="\d+">([\s\S]*?)<\/rv>/g)]
+    .map(m => [...m[1].matchAll(/<v>(\d+)<\/v>/g)].map(v => parseInt(v[1], 10)));
+
+  const relXml = await relFile.async("string");
+  const relSeq = [...relXml.matchAll(/<rel r:id="(rId\d+)"\/>/g)].map(m => m[1]);
+
+  const relRelsXml = await relRelsFile.async("string");
+  const relTargets = {};
+  [...relRelsXml.matchAll(/Id="(rId\d+)"[^>]*Target="([^"]+)"/g)].forEach(m => { relTargets[m[1]] = m[2]; });
+
+  bkList.forEach((rvbIndex, i) => {
+    const vm = i + 1; // vm é 1-based na planilha; posição na lista bk = índice do rich value
+    const rv = rvBlocks[rvbIndex];
+    if (!rv || !rv.length) return;
+    const rId = relSeq[rv[0]];
+    if (!rId) return;
+    const target = relTargets[rId];
+    if (!target) return;
+    vmToMedia[vm] = "xl/" + target.replace(/^(\.\.\/)+/, "").replace(/^\//, "");
+  });
+  return vmToMedia;
+}
+
+async function parseEquipWorkbookComFotos(file) {
+  const zip = await JSZip.loadAsync(file);
+
+  const workbookXml = await zip.file("xl/workbook.xml").async("string");
+  const firstSheetRid = (workbookXml.match(/<sheet[^>]*r:id="([^"]+)"/) || [])[1];
+  const wbRelsXml = await zip.file("xl/_rels/workbook.xml.rels").async("string");
+  const relMatch = [...wbRelsXml.matchAll(/<Relationship Id="([^"]+)"[^>]*Target="([^"]+)"/g)]
+    .find(m => m[1] === firstSheetRid);
+  if (!relMatch) throw new Error("Não consegui localizar a planilha dentro do arquivo.");
+  const sheetPath = "xl/" + relMatch[2].replace(/^\.?\/?/, "");
+  const sheetFile = zip.file(sheetPath);
+  if (!sheetFile) throw new Error("Não consegui abrir a aba da planilha.");
+  const sheetXml = await sheetFile.async("string");
+
+  let shared = [];
+  const ssFile = zip.file("xl/sharedStrings.xml");
+  if (ssFile) {
+    const ssXml = await ssFile.async("string");
+    shared = [...ssXml.matchAll(/<si>([\s\S]*?)<\/si>/g)]
+      .map(m => [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(t => t[1]).join(""));
+  }
+
+  const vmToMedia = await buildVmToMediaMap(zip);
+
+  const rowMatches = [...sheetXml.matchAll(/<row r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g)];
+  if (!rowMatches.length) return { records: [], zip: null };
+
+  function cellsOf(rowXml) {
+    return [...rowXml.matchAll(/<c r="([A-Z]+)\d+"([^>]*)>(?:<v>([\s\S]*?)<\/v>)?<\/c>/g)]
+      .map(m => ({ col: m[1], attrs: m[2], v: m[3] }));
+  }
+  function cellText(c) {
+    if (!c || c.v === undefined) return "";
+    return /t="s"/.test(c.attrs) ? (shared[parseInt(c.v, 10)] || "") : c.v;
+  }
+  function cellVm(c) {
+    if (!c) return null;
+    const m = c.attrs.match(/vm="(\d+)"/);
+    return m ? parseInt(m[1], 10) : null;
+  }
+
+  const headerCells = cellsOf(rowMatches[0][2]);
+  const headerMap = {};
+  headerCells.forEach(c => { headerMap[c.col] = cellText(c).toUpperCase(); });
+  const findCol = (...keywords) => {
+    for (const [col, txt] of Object.entries(headerMap)) {
+      if (keywords.some(k => txt.includes(k))) return col;
+    }
+    return null;
+  };
+  const colTipo = findCol("TIPO");
+  if (!colTipo) throw new Error('Não encontrei uma coluna "TIPO" nessa planilha — confirme se é o formato certo.');
+  const colMarca = findCol("FABRICANTE", "MARCA");
+  const colModelo = findCol("MODELO");
+  const colPlaca = findCol("PLACA");
+  const colFornecedor = findCol("FORNECEDOR", "PROPRIET");
+  const colSituacao = findCol("SITUA");
+  const colOperador = findCol("OPERADOR", "MOTORISTA");
+  const colFoto = findCol("FOTO");
+
+  const records = [];
+  for (let i = 1; i < rowMatches.length; i++) {
+    const cells = cellsOf(rowMatches[i][2]);
+    const byCol = {};
+    cells.forEach(c => { byCol[c.col] = c; });
+    const tipo = cellText(byCol[colTipo]).trim();
+    if (!tipo) continue;
+    const vmFoto = colFoto ? cellVm(byCol[colFoto]) : null;
+    records.push({
+      tipo,
+      marca: cellText(byCol[colMarca]).trim(),
+      modelo: cellText(byCol[colModelo]).trim(),
+      placa: cellText(byCol[colPlaca]).trim(),
+      proprietario: cellText(byCol[colFornecedor]).trim(),
+      operador: cellText(byCol[colOperador]).trim(),
+      situacao: cellText(byCol[colSituacao]).trim() || "ATIVO",
+      mediaPath: (vmFoto && vmToMedia[vmFoto]) || null
+    });
+  }
+  return { records, zip };
+}
+
+async function compressZipImage(zip, mediaPath) {
+  const entry = zip.file(mediaPath);
+  if (!entry) return null;
+  const blob = await entry.async("blob");
+  const bitmap = await createImageBitmap(blob);
+  const maxDim = 1000;
+  let { width, height } = bitmap;
+  if (width > maxDim || height > maxDim) {
+    const scale = maxDim / Math.max(width, height);
+    width = Math.round(width * scale); height = Math.round(height * scale);
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = width; canvas.height = height;
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
+  return canvas.toDataURL("image/jpeg", 0.75);
+}
+
+let pendingImportFotos = null;
+
+document.getElementById("btn-importar-fotos-equip").addEventListener("click", () => {
+  if (!requireUnlock()) return;
+  document.getElementById("import-fotos-obra").value = "";
+  document.getElementById("import-fotos-file").value = "";
+  document.getElementById("import-fotos-status").textContent = "";
+  document.getElementById("import-fotos-preview").innerHTML = "";
+  document.getElementById("btn-confirmar-import-fotos").disabled = true;
+  pendingImportFotos = null;
+  document.getElementById("obra-equip-list-datalist").innerHTML =
+    [...new Set([...Object.values(EQUIP_STATE.obras).map(o => o.nome)])]
+      .sort((a, b) => a.localeCompare(b))
+      .map(nome => `<option value="${escapeHtml(nome)}">`).join("");
+  document.getElementById("modal-import-fotos").classList.add("open");
+});
+
+document.getElementById("import-fotos-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById("import-fotos-status");
+  const previewEl = document.getElementById("import-fotos-preview");
+  const confirmBtn = document.getElementById("btn-confirmar-import-fotos");
+  statusEl.textContent = "Lendo planilha e extraindo fotos...";
+  previewEl.innerHTML = "";
+  confirmBtn.disabled = true;
+  try {
+    const result = await parseEquipWorkbookComFotos(file);
+    result.fileName = file.name;
+    pendingImportFotos = result;
+    const total = result.records.length;
+    const comFoto = result.records.filter(r => r.mediaPath).length;
+    if (!total) {
+      statusEl.textContent = "Nenhum equipamento encontrado nessa planilha.";
+      return;
+    }
+    statusEl.innerHTML = `<strong>${total}</strong> equipamento(s) encontrados — <strong>${comFoto}</strong> com foto vinculada.`;
+    previewEl.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tipo</th><th>Marca</th><th>Modelo</th><th>Placa</th><th>Foto</th></tr></thead>
+          <tbody>${result.records.slice(0, 8).map(r => `<tr>
+            <td>${escapeHtml(r.tipo)}</td><td>${escapeHtml(r.marca)}</td><td>${escapeHtml(r.modelo)}</td>
+            <td>${escapeHtml(r.placa)}</td><td>${r.mediaPath ? "✅" : "—"}</td>
+          </tr>`).join("")}</tbody>
+        </table>
+      </div>
+      ${total > 8 ? `<div style="font-size:12px;color:var(--text-dim);margin-top:6px;">...e mais ${total - 8}.</div>` : ""}
+    `;
+    confirmBtn.disabled = false;
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Erro ao ler a planilha: " + err.message;
+  }
+});
+
+document.getElementById("btn-confirmar-import-fotos").addEventListener("click", async () => {
+  if (!requireUnlock()) return;
+  const obra = document.getElementById("import-fotos-obra").value.trim();
+  if (!obra) { toast("Informe a obra desse relatório.", true); return; }
+  if (!pendingImportFotos || !pendingImportFotos.records.length) { toast("Nada pra importar.", true); return; }
+
+  const btn = document.getElementById("btn-confirmar-import-fotos");
+  btn.disabled = true; btn.textContent = "Importando...";
+  try {
+    // substitui só os equipamentos dessa obra (mesmo padrão da importação semanal comum)
+    if (useFirebase) {
+      const existing = await fs.getDocs(fs.query(fs.collection(db, "equipamentos"), fs.where("obra", "==", obra)));
+      let batch = fs.writeBatch(db), opCount = 0;
+      const batches = [];
+      for (const d of existing.docs) {
+        batch.delete(d.ref);
+        opCount++;
+        if (opCount >= 450) { batches.push(batch); batch = fs.writeBatch(db); opCount = 0; }
+      }
+      batches.push(batch);
+      for (const b of batches) await b.commit();
+    } else {
+      const data = lsRead(LS_KEY_EQUIP, "equipamentos");
+      data.equipamentos = data.equipamentos.filter(w => w.obra !== obra);
+      lsWrite(LS_KEY_EQUIP, data);
+    }
+
+    let comFoto = 0;
+    for (const rec of pendingImportFotos.records) {
+      const id = novoEquipId();
+      await EquipStore.saveItem({
+        id, obra, tipo: rec.tipo, marca: rec.marca, modelo: rec.modelo, placa: rec.placa,
+        proprietario: rec.proprietario, operador: rec.operador, situacao: rec.situacao || "ATIVO",
+        locacao: "", tag: "", renavam: "", chassis: "", ano: "", sieng: "", frente: "", obs: "",
+        temFoto: !!rec.mediaPath
+      });
+      if (rec.mediaPath && pendingImportFotos.zip) {
+        const dataUrl = await compressZipImage(pendingImportFotos.zip, rec.mediaPath);
+        if (dataUrl) { await setEquipFoto(id, dataUrl); comFoto++; }
+      }
+    }
+    await EquipStore.createEmptyObra(obra);
+    await EquipStore.addImportLog({ fileName: pendingImportFotos.fileName, obras: [obra], totalRegistros: pendingImportFotos.records.length });
+
+    toast(`Importação concluída: ${pendingImportFotos.records.length} equipamento(s), ${comFoto} com foto.`);
+    closeModals();
+    await reloadEquip();
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao importar: " + err.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Confirmar importação";
+    pendingImportFotos = null;
+  }
+});
 
 document.getElementById("btn-save-equip").addEventListener("click", async () => {
   if (!requireUnlock()) return;
