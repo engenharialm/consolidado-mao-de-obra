@@ -2034,6 +2034,13 @@ document.querySelectorAll(".group-toggle .gt-btn").forEach(btn => {
   document.getElementById(id).addEventListener("change", () => { renderEquipKanban(); renderEquipListaMestre(); });
 });
 
+document.getElementById("eq-obra").addEventListener("change", () => {
+  const obra = document.getElementById("eq-obra").value;
+  if (!obra || equipGroupBy !== "obra") return;
+  const col = document.querySelector(`#equip-kanban .kanban-col-body[data-group="${CSS.escape(obra)}"]`)?.closest(".kanban-col");
+  col?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+});
+
 /* -------------------------------------------------------------------------
    EQUIPAMENTOS — LISTA MESTRE (tabela)
    ------------------------------------------------------------------------- */
