@@ -239,6 +239,8 @@
   .kanban-card .kc-horimetro.alert{color:var(--danger);}
   .kanban-card .kc-manut-info{font-size:.68rem;color:var(--warning);margin-top:4px;font-style:italic;}
   .badge.eq-ativo{background:rgba(11,131,178,.12);color:var(--accent);}
+  .badge.eq-disponivel{background:rgba(21,128,61,.12);color:#15803D;}
+  .badge.eq-requer-manutencao{background:rgba(202,138,4,.14);color:#CA8A04;}
   .badge.eq-inativo{background:rgba(220,38,38,.1);color:var(--danger);}
   .badge.eq-manutencao{background:rgba(180,83,9,.1);color:var(--warning);}
   .badge.eq-outro{background:#E2E8F0;color:var(--text-dim);}
@@ -505,6 +507,7 @@
     <nav class="tabs">
       <button data-eview="quadro" class="active">Quadro</button>
       <button data-eview="lista">Lista Mestre</button>
+      <button data-eview="manutencao">Manutenção</button>
     </nav>
 
     <div class="equip-toolbar" id="equip-shared-toolbar">
@@ -516,6 +519,9 @@
       <button class="btn btn-ghost btn-sm" id="btn-gerenciar-obras-equip">Gerenciar obras</button>
       <button class="btn btn-ghost btn-sm" id="btn-importar-fotos-equip">Importar planilha (com fotos)</button>
       <button class="btn btn-accent btn-sm" id="btn-add-equip">+ Novo equipamento</button>
+    </div>
+    <div class="equip-toolbar" id="equip-situacao-pills" style="padding-top:0;">
+      <span style="font-size:.76rem;color:var(--text-dim);">Situação:</span>
     </div>
     <div class="equip-toolbar" id="equip-categoria-pills" style="padding-top:0;">
       <span style="font-size:.76rem;color:var(--text-dim);">Categoria:</span>
@@ -542,6 +548,16 @@
           <tbody id="equip-lista-table"></tbody>
         </table>
       </div>
+    </section>
+
+    <section class="eview" id="equip-view-manutencao">
+      <main style="padding:20px 28px 60px;max-width:1200px;width:100%;margin:0 auto;">
+        <div class="section-title">Requer manutenção</div>
+        <div id="equip-manut-requer" class="kanban" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));"></div>
+
+        <div class="section-title" style="margin-top:24px;">Em manutenção</div>
+        <div id="equip-manut-emmanut" class="kanban" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));"></div>
+      </main>
     </section>
 
   </div>
@@ -806,9 +822,11 @@
         <div class="field">
           <label>Situação</label>
           <select id="eqf-situacao">
-            <option>ATIVO</option>
+            <option>EM OPERAÇÃO</option>
+            <option>DISPONÍVEL</option>
+            <option>REQUER MANUTENÇÃO</option>
+            <option>EM MANUTENÇÃO</option>
             <option>INATIVO</option>
-            <option>MANUTENÇÃO</option>
           </select>
         </div>
         <div class="field">
@@ -821,13 +839,17 @@
         </div>
         <div class="field full" id="eqf-manutencao-box" style="display:none;background:var(--accent-dim);border-radius:8px;padding:12px;">
           <div class="form-grid" style="grid-template-columns:1fr 1fr;">
-            <div class="field">
-              <label>Motivo da manutenção</label>
-              <input type="text" id="eqf-motivo">
+            <div class="field full">
+              <label>O que precisa ser feito</label>
+              <input type="text" id="eqf-motivo" placeholder="Ex.: troca de óleo, vazamento hidráulico...">
             </div>
-            <div class="field">
-              <label>Previsão de devolução</label>
+            <div class="field" id="eqf-previsao-box">
+              <label>Prazo previsto (previsão de devolução)</label>
               <input type="text" id="eqf-previsao" placeholder="dd/mm/aaaa">
+            </div>
+            <div class="field" id="eqf-status-mecanica-box">
+              <label>Status na mecânica</label>
+              <input type="text" id="eqf-status-mecanica" placeholder="Ex.: em diagnóstico, aguardando peça...">
             </div>
           </div>
         </div>
@@ -1719,9 +1741,11 @@ let equipGroupBy = "obra";
 
 function equipStatusClass(situacao) {
   const s = (situacao || "").toUpperCase();
-  if (s.includes("MANUTEN")) return "eq-manutencao";
+  if (s.includes("REQUER")) return "eq-requer-manutencao";
+  if (s.includes("EM MANUTEN") || (s.includes("MANUTEN") && !s.includes("REQUER"))) return "eq-manutencao";
   if (s.includes("INATIVO")) return "eq-inativo";
-  if (s.includes("ATIVO")) return "eq-ativo";
+  if (s.includes("DISPON")) return "eq-disponivel";
+  if (s.includes("OPERA") || s.includes("ATIVO")) return "eq-ativo";
   return "eq-outro";
 }
 
@@ -1747,6 +1771,7 @@ function inferCategoriaEquip(tipo) {
 
 let equipSubView = "quadro";
 let equipCategoriaFiltro = "";
+let equipSituacaoFiltro = "";
 
 function switchEquipSubView(view) {
   equipSubView = view;
@@ -1761,7 +1786,51 @@ function renderEquipAll() {
   renderEquipFilters();
   renderEquipKanban();
   renderEquipListaMestre();
+  renderEquipManutencaoView();
   if (currentModule === "relatorios" && relatoriosSubView === "equipamentos") renderEquipRelatorio();
+}
+
+function renderEquipManutencaoView() {
+  const requer = EQUIP_STATE.equipamentos.filter(w => w.situacao === "REQUER MANUTENÇÃO")
+    .sort((a, b) => (a.tipo || "").localeCompare(b.tipo || ""));
+  const emManut = EQUIP_STATE.equipamentos.filter(w => w.situacao === "EM MANUTENÇÃO")
+    .sort((a, b) => (a.tipo || "").localeCompare(b.tipo || ""));
+
+  const cardHtml = (w, showPrazoStatus) => `
+    <div class="kanban-card" data-id="${w.id}">
+      <div style="display:flex;justify-content:space-between;gap:6px;">
+        <div class="kc-tipo">${w.temFoto ? "📷 " : ""}${escapeHtml(w.tipo)}</div>
+      </div>
+      <div class="kc-marca">${escapeHtml([w.marca, w.modelo].filter(Boolean).join(" ")) || "—"}</div>
+      <div class="kc-meta">
+        <span class="badge ${equipStatusClass(w.situacao)}">${escapeHtml(w.situacao || "—")}</span>
+        ${w.placa ? `<span class="kc-tag">${escapeHtml(w.placa)}</span>` : ""}
+        ${w.obra ? `<span class="kc-tag">${escapeHtml(w.obra)}</span>` : ""}
+      </div>
+      ${w.motivoManutencao ? `<div class="kc-manut-info">O que precisa ser feito: ${escapeHtml(w.motivoManutencao)}</div>` : ""}
+      ${showPrazoStatus && w.previsaoDevolucao ? `<div class="kc-manut-info">Prazo: ${escapeHtml(w.previsaoDevolucao)}</div>` : ""}
+      ${showPrazoStatus && w.statusMecanica ? `<div class="kc-manut-info">Status na mecânica: ${escapeHtml(w.statusMecanica)}</div>` : ""}
+    </div>
+  `;
+
+  const requerBox = document.getElementById("equip-manut-requer");
+  requerBox.innerHTML = requer.length
+    ? requer.map(w => cardHtml(w, false)).join("")
+    : `<div class="empty-state">Nenhum equipamento requer manutenção no momento.</div>`;
+
+  const emManutBox = document.getElementById("equip-manut-emmanut");
+  emManutBox.innerHTML = emManut.length
+    ? emManut.map(w => cardHtml(w, true)).join("")
+    : `<div class="empty-state">Nenhum equipamento em manutenção no momento.</div>`;
+
+  [requerBox, emManutBox].forEach(box => {
+    box.querySelectorAll(".kanban-card").forEach(card => {
+      card.addEventListener("click", () => {
+        const item = EQUIP_STATE.equipamentos.find(w => w.id === card.dataset.id);
+        if (item) openEquipModal(item);
+      });
+    });
+  });
 }
 
 function renderEquipFilters() {
@@ -1795,6 +1864,18 @@ function renderEquipFilters() {
       renderEquipListaMestre();
     });
   });
+
+  const sitPillsBox = document.getElementById("equip-situacao-pills");
+  sitPillsBox.innerHTML = `<span style="font-size:.76rem;color:var(--text-dim);">Situação:</span>` +
+    EQUIP_SITUACAO_ORDER.map(s => `<button type="button" class="gt-btn eq-sit-pill${equipSituacaoFiltro === s ? " active" : ""}" data-sit="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join("");
+  sitPillsBox.querySelectorAll(".eq-sit-pill").forEach(btn => {
+    btn.addEventListener("click", () => {
+      equipSituacaoFiltro = equipSituacaoFiltro === btn.dataset.sit ? "" : btn.dataset.sit;
+      renderEquipFilters();
+      renderEquipKanban();
+      renderEquipListaMestre();
+    });
+  });
 }
 
 function getFilteredEquip() {
@@ -1809,11 +1890,12 @@ function getFilteredEquip() {
     if (obra && w.obra !== obra) return false;
     if (situacao && w.situacao !== situacao) return false;
     if (equipCategoriaFiltro && inferCategoriaEquip(w.tipo) !== equipCategoriaFiltro) return false;
+    if (equipSituacaoFiltro && w.situacao !== equipSituacaoFiltro) return false;
     return true;
   });
 }
 
-const EQUIP_SITUACAO_ORDER = ["ATIVO", "MANUTENÇÃO", "INATIVO"];
+const EQUIP_SITUACAO_ORDER = ["EM OPERAÇÃO", "DISPONÍVEL", "REQUER MANUTENÇÃO", "EM MANUTENÇÃO", "INATIVO"];
 
 // Quantas horas antes do horímetro de manutenção o card já entra em alerta (vermelho).
 const HORIMETRO_ALERTA = 50;
@@ -1875,7 +1957,7 @@ function renderEquipKanban() {
                 ${w.locacao ? `<span class="kc-tag">${escapeHtml(equipPropriedadeLabel(w.locacao))}</span>` : ""}
               </div>
               ${w.horimetroAtual ? `<div class="kc-horimetro ${equipHorimetroAlert(w) ? "alert" : ""}">⏱ Horímetro: ${escapeHtml(w.horimetroAtual)}${w.horimetroManutencao ? " / " + escapeHtml(w.horimetroManutencao) : ""} h</div>` : ""}
-              ${w.situacao === "MANUTENÇÃO" && (w.motivoManutencao || w.previsaoDevolucao) ? `<div class="kc-manut-info">${escapeHtml(w.motivoManutencao || "")}${w.motivoManutencao && w.previsaoDevolucao ? " · " : ""}${w.previsaoDevolucao ? "volta em " + escapeHtml(w.previsaoDevolucao) : ""}</div>` : ""}
+              ${(w.situacao === "EM MANUTENÇÃO" || w.situacao === "REQUER MANUTENÇÃO") && w.motivoManutencao ? `<div class="kc-manut-info">${escapeHtml(w.motivoManutencao)}${w.previsaoDevolucao ? " · volta em " + escapeHtml(w.previsaoDevolucao) : ""}</div>` : ""}
             </div>
           `).join("") || `<div class="empty-state" style="padding:24px 10px;font-size:.72rem;">Vazio</div>`}
         </div>
@@ -2709,8 +2791,13 @@ document.getElementById("btn-recriar-do-rh").addEventListener("click", async () 
 });
 
 function toggleEquipManutencaoBox() {
-  const isManutencao = document.getElementById("eqf-situacao").value === "MANUTENÇÃO";
-  document.getElementById("eqf-manutencao-box").style.display = isManutencao ? "" : "none";
+  const situacao = document.getElementById("eqf-situacao").value;
+  const emManutencao = situacao === "EM MANUTENÇÃO";
+  const requerManutencao = situacao === "REQUER MANUTENÇÃO";
+  document.getElementById("eqf-manutencao-box").style.display = (emManutencao || requerManutencao) ? "" : "none";
+  // prazo e status na mecânica só fazem sentido quando o equipamento já está lá
+  document.getElementById("eqf-previsao-box").style.display = emManutencao ? "" : "none";
+  document.getElementById("eqf-status-mecanica-box").style.display = emManutencao ? "" : "none";
 }
 document.getElementById("eqf-situacao").addEventListener("change", toggleEquipManutencaoBox);
 
@@ -2804,11 +2891,12 @@ function openEquipModal(item) {
   }
   f("eqf-tipo").value = item?.tipo || "";
   f("eqf-obra").value = item?.obra || "";
-  f("eqf-situacao").value = ["ATIVO", "INATIVO", "MANUTENÇÃO"].includes(item?.situacao) ? item.situacao : "ATIVO";
+  f("eqf-situacao").value = EQUIP_SITUACAO_ORDER.includes(item?.situacao) ? item.situacao : "EM OPERAÇÃO";
   f("eqf-horimetro-atual").value = item?.horimetroAtual || "";
   f("eqf-horimetro-manutencao").value = item?.horimetroManutencao || "";
   f("eqf-motivo").value = item?.motivoManutencao || "";
   f("eqf-previsao").value = item?.previsaoDevolucao || "";
+  f("eqf-status-mecanica").value = item?.statusMecanica || "";
   f("eqf-marca").value = item?.marca || "";
   f("eqf-modelo").value = item?.modelo || "";
   f("eqf-operador").value = item?.operador || "";
@@ -3172,8 +3260,9 @@ document.getElementById("btn-save-equip").addEventListener("click", async () => 
     locacao: f("eqf-locacao"), valor: f("eqf-valor"), tag: f("eqf-tag"), renavam: f("eqf-renavam"),
     chassis: f("eqf-chassis"), ano: f("eqf-ano"), sieng: f("eqf-sieng"), frente: f("eqf-frente"), obs: f("eqf-obs"),
     horimetroAtual: f("eqf-horimetro-atual"), horimetroManutencao: f("eqf-horimetro-manutencao"),
-    motivoManutencao: situacao === "MANUTENÇÃO" ? f("eqf-motivo") : "",
-    previsaoDevolucao: situacao === "MANUTENÇÃO" ? f("eqf-previsao") : "",
+    motivoManutencao: (situacao === "EM MANUTENÇÃO" || situacao === "REQUER MANUTENÇÃO") ? f("eqf-motivo") : "",
+    previsaoDevolucao: situacao === "EM MANUTENÇÃO" ? f("eqf-previsao") : "",
+    statusMecanica: situacao === "EM MANUTENÇÃO" ? f("eqf-status-mecanica") : "",
     manutencaoItens: collectManutItens()
   };
   if (equipFotoPending?.action === "set") rec.temFoto = true;
