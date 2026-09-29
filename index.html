@@ -408,8 +408,16 @@
     <!-- QUADRO -->
     <section class="view" id="view-quadro">
       <div id="mo-kanban-wrap">
-        <div style="padding:14px 28px 0;font-size:13px;color:var(--text-dim);">
-          Arraste um colaborador pra mudar a obra dele. Turmas de asfalto aparecem como um bloco único (com o encarregado em destaque) — arraste o bloco todo pra remanejar a turma inteira de uma vez.
+        <div style="padding:14px 28px 0;font-size:13px;color:var(--text-dim);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span>Arraste um colaborador pra mudar a obra dele. Turmas de asfalto aparecem como um bloco único (com o encarregado em destaque) — arraste o bloco todo pra remanejar a turma inteira de uma vez.</span>
+          <button class="btn btn-ghost btn-sm" id="btn-montar-equipe" style="flex-shrink:0;">+ Montar equipe de asfalto</button>
+        </div>
+        <div id="mo-equipe-bar" style="display:none;align-items:center;gap:14px;padding:10px 28px;margin:10px 28px 0;background:var(--accent-dim);border-radius:8px;">
+          <strong id="mo-equipe-count" style="color:var(--accent);">0 selecionado(s)</strong>
+          <span style="font-size:.76rem;color:var(--text-dim);">Clique nos colaboradores pra marcar. Quem tiver "ENCARREGADO" na função vira a referência da equipe.</span>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost btn-sm" id="btn-cancelar-equipe">Cancelar</button>
+          <button class="btn btn-accent btn-sm" id="btn-criar-equipe">Criar equipe</button>
         </div>
         <div class="section-title" style="margin:14px 28px 0;">Por obra</div>
         <div class="kanban kanban-wrap" id="mo-kanban-obras"></div>
@@ -792,6 +800,27 @@
   </div>
 </div>
 
+<!-- MODAL: NOMEAR NOVA EQUIPE DE ASFALTO -->
+<div class="modal-backdrop" id="modal-nome-equipe">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-head">
+      <h2>Criar equipe de asfalto</h2>
+      <button class="modal-close" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field full">
+        <label>Nome da equipe</label>
+        <input type="text" id="te-nome-turma" placeholder="Ex.: Equipe Asfalto João">
+      </div>
+      <p id="te-resumo" style="font-size:.8rem;color:var(--text-dim);margin-top:6px;"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-close>Cancelar</button>
+      <button class="btn btn-accent" id="btn-confirmar-equipe">Criar equipe</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: EQUIPMENT FORM -->
 <div class="modal-backdrop" id="modal-equip">
   <div class="modal">
@@ -1097,6 +1126,27 @@ function makeStore({ itemsKey, colName, obrasColName, logColName, lsKey }) {
       } else {
         const data = lsRead(lsKey, itemsKey);
         data[itemsKey].forEach(c => { if (ids.includes(c.id)) c.obra = obraName; });
+        lsWrite(lsKey, data);
+      }
+    },
+
+    async bulkSetLocal(ids, localName) {
+      if (useFirebase) {
+        return withTimeout(async () => {
+          const batches = [];
+          let batch = fs.writeBatch(db);
+          let opCount = 0;
+          for (const id of ids) {
+            batch.update(fs.doc(db, colName, id), { local: localName });
+            opCount++;
+            if (opCount >= 450) { batches.push(batch); batch = fs.writeBatch(db); opCount = 0; }
+          }
+          batches.push(batch);
+          for (const b of batches) await b.commit();
+        }, 30000);
+      } else {
+        const data = lsRead(lsKey, itemsKey);
+        data[itemsKey].forEach(c => { if (ids.includes(c.id)) c.local = localName; });
         lsWrite(lsKey, data);
       }
     },
@@ -1515,6 +1565,9 @@ function getFilteredWorkers() {
    ------------------------------------------------------------------------- */
 function isTurmaLocal(local) { return /ASFALTO/i.test(local || ""); }
 
+let moEquipeSelecionando = false;
+let moEquipeSelecionados = new Set();
+
 function renderMoKanban() {
   const boardObras = document.getElementById("mo-kanban-obras");
   const boardTurmas = document.getElementById("mo-kanban-turmas");
@@ -1556,12 +1609,15 @@ function renderMoKanban() {
           <div class="kc-meta"><span class="kc-tag">Clique pra ver a equipe · arraste pra remanejar</span></div>
         </div>`;
     }).join("");
-    const individualCards = individuais.slice().sort((a, b) => (a.nome || "").localeCompare(b.nome || "")).map(w => `
-      <div class="kanban-card compact" draggable="true" data-id="${w.id}" title="${escapeHtml(w.nome)} — ${escapeHtml(w.funcao || "—")}">
-        <div class="kc-tipo">${escapeHtml(w.nome)}</div>
+    const individualCards = individuais.slice().sort((a, b) => (a.nome || "").localeCompare(b.nome || "")).map(w => {
+      const selecionado = moEquipeSelecionando && moEquipeSelecionados.has(w.id);
+      return `
+      <div class="kanban-card compact${selecionado ? " selecionado" : ""}" draggable="${moEquipeSelecionando ? "false" : "true"}" data-id="${w.id}" title="${escapeHtml(w.nome)} — ${escapeHtml(w.funcao || "—")}" style="${selecionado ? "border:1.5px solid var(--accent);background:var(--accent-dim);" : ""}">
+        <div class="kc-tipo">${moEquipeSelecionando ? (selecionado ? "☑ " : "☐ ") : ""}${escapeHtml(w.nome)}</div>
         <div class="kc-marca">${escapeHtml(w.funcao || "—")}</div>
         <span class="badge ${statusClass(w.status)}">${escapeHtml((w.status || "—").slice(0, 3))}</span>
-      </div>`).join("");
+      </div>`;
+    }).join("");
     return turmaCards + individualCards || `<div class="empty-state" style="padding:24px 10px;font-size:.72rem;">Vazio</div>`;
   };
 
@@ -1602,6 +1658,14 @@ function wireMoDragDrop() {
     });
     card.addEventListener("dragend", () => card.classList.remove("dragging"));
     card.addEventListener("click", () => {
+      if (moEquipeSelecionando) {
+        const id = card.dataset.id;
+        if (moEquipeSelecionados.has(id)) moEquipeSelecionados.delete(id);
+        else moEquipeSelecionados.add(id);
+        renderMoKanban();
+        atualizarBarraEquipe();
+        return;
+      }
       const item = STATE.colaboradores.find(w => w.id === card.dataset.id);
       if (item) openWorkerModal(item);
     });
@@ -1653,6 +1717,54 @@ function wireMoDragDrop() {
     });
   });
 }
+
+function atualizarBarraEquipe() {
+  const bar = document.getElementById("mo-equipe-bar");
+  bar.style.display = moEquipeSelecionando ? "flex" : "none";
+  document.getElementById("mo-equipe-count").textContent = `${moEquipeSelecionados.size} selecionado(s)`;
+}
+
+document.getElementById("btn-montar-equipe").addEventListener("click", () => {
+  moEquipeSelecionando = true;
+  moEquipeSelecionados = new Set();
+  renderMoKanban();
+  atualizarBarraEquipe();
+});
+
+document.getElementById("btn-cancelar-equipe").addEventListener("click", () => {
+  moEquipeSelecionando = false;
+  moEquipeSelecionados = new Set();
+  renderMoKanban();
+  atualizarBarraEquipe();
+});
+
+document.getElementById("btn-criar-equipe").addEventListener("click", () => {
+  if (moEquipeSelecionados.size < 1) { toast("Selecione ao menos 1 colaborador.", true); return; }
+  const membros = STATE.colaboradores.filter(w => moEquipeSelecionados.has(w.id));
+  const encarregado = membros.find(w => (w.funcao || "").toUpperCase().includes("ENCARREGADO"));
+  document.getElementById("te-nome-turma").value = encarregado ? `Equipe Asfalto ${encarregado.nome}` : "Equipe Asfalto";
+  document.getElementById("te-resumo").textContent = `${membros.length} colaborador(es): ${membros.map(w => w.nome).join(", ")}`;
+  document.getElementById("modal-nome-equipe").classList.add("open");
+});
+
+document.getElementById("btn-confirmar-equipe").addEventListener("click", async () => {
+  if (!requireUnlock()) return;
+  let nome = document.getElementById("te-nome-turma").value.trim();
+  if (!nome) { toast("Digite um nome para a equipe.", true); return; }
+  if (!/ASFALTO/i.test(nome)) nome = `Equipe Asfalto ${nome}`;
+  const ids = [...moEquipeSelecionados];
+  try {
+    await Store.bulkSetLocal(ids, nome);
+    closeModals();
+    toast(`Equipe "${nome}" criada com ${ids.length} pessoa(s).`);
+    moEquipeSelecionando = false;
+    moEquipeSelecionados = new Set();
+    await reload();
+    atualizarBarraEquipe();
+  } catch (err) {
+    toast("Erro ao criar equipe: " + err.message, true);
+  }
+});
 
 function renderConsolidado() {
   const list = getFilteredWorkers();
