@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Consolidado de Mão de Obra — LM</title>
+<title>Controle LM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -352,7 +352,7 @@
     <div class="brand">
       <img class="logo" id="brand-logo" src="logo-lm.png" alt="LM">
       <div>
-        <h1 id="brand-title">Consolidado de Mão de Obra</h1>
+        <h1 id="brand-title">Controle LM</h1>
         <span id="brand-sub">LM CONSTRUTORA — EFETIVO POR OBRA</span>
       </div>
     </div>
@@ -632,7 +632,7 @@
     </section>
   </div>
 
-  <footer>Consolidado de Mão de Obra · dados salvos automaticamente · <span id="footer-mode">modo local</span></footer>
+  <footer>Controle LM · dados salvos automaticamente · <span id="footer-mode">modo local</span></footer>
 </div>
 
 <!-- MODAL: IMPORT PREVIEW -->
@@ -1343,7 +1343,7 @@ function switchModule(mod) {
     document.getElementById("brand-title").textContent = "Relatórios";
     document.getElementById("brand-sub").textContent = "LM CONSTRUTORA — RELATÓRIOS GERENCIAIS";
   } else {
-    document.getElementById("brand-title").textContent = isEquip ? "Controle de Equipamentos" : "Consolidado de Mão de Obra";
+    document.getElementById("brand-title").textContent = isEquip ? "Controle de Equipamentos" : "Controle LM";
     document.getElementById("brand-sub").textContent = isEquip ? "LM CONSTRUTORA — EQUIPAMENTOS POR OBRA" : "LM CONSTRUTORA — EFETIVO POR OBRA";
   }
   if ((isEquip || (isRelatorios && relatoriosSubView === "equipamentos")) && !equipLoaded) reloadEquip();
