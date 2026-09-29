@@ -1929,6 +1929,8 @@ function renderEquipKanban() {
     keys = [...EQUIP_SITUACAO_ORDER.filter(s => keys.includes(s)), ...keys.filter(k => !EQUIP_SITUACAO_ORDER.includes(k)).sort()];
   } else {
     keys.sort((a, b) => a.localeCompare(b));
+    const obraFiltro = document.getElementById("eq-obra").value;
+    if (obraFiltro && keys.includes(obraFiltro)) keys = [obraFiltro];
   }
 
   const board = document.getElementById("equip-kanban");
@@ -2032,13 +2034,6 @@ document.querySelectorAll(".group-toggle .gt-btn").forEach(btn => {
 ["eq-busca", "eq-obra", "eq-situacao"].forEach(id => {
   document.getElementById(id).addEventListener("input", () => { renderEquipKanban(); renderEquipListaMestre(); });
   document.getElementById(id).addEventListener("change", () => { renderEquipKanban(); renderEquipListaMestre(); });
-});
-
-document.getElementById("eq-obra").addEventListener("change", () => {
-  const obra = document.getElementById("eq-obra").value;
-  if (!obra || equipGroupBy !== "obra") return;
-  const col = document.querySelector(`#equip-kanban .kanban-col-body[data-group="${CSS.escape(obra)}"]`)?.closest(".kanban-col");
-  col?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
 });
 
 /* -------------------------------------------------------------------------
