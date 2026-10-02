@@ -3147,6 +3147,17 @@ async function buildVmToMediaMap(zip) {
   return vmToMedia;
 }
 
+function normalizeEquipSituacao(raw) {
+  const s = (raw || "").trim().toUpperCase();
+  if (!s) return "EM OPERAÇÃO";
+  if (s.includes("REQUER")) return "REQUER MANUTENÇÃO";
+  if (s.includes("MANUTEN")) return "EM MANUTENÇÃO";
+  if (s.includes("DISPON")) return "DISPONÍVEL";
+  if (s.includes("INATIV")) return "REQUER MANUTENÇÃO";
+  if (s.includes("OPERA") || s.includes("ATIVO")) return "EM OPERAÇÃO";
+  return "EM OPERAÇÃO";
+}
+
 async function parseEquipWorkbookComFotos(file) {
   const zip = await JSZip.loadAsync(file);
 
@@ -3188,7 +3199,12 @@ async function parseEquipWorkbookComFotos(file) {
     return m ? parseInt(m[1], 10) : null;
   }
 
-  const headerCells = cellsOf(rowMatches[0][2]);
+  // o cabeçalho nem sempre está na linha 1 (ex.: título "OBRA - X" acima) — procura nas primeiras linhas
+  let headerIdx = 0;
+  for (let i = 0; i < Math.min(rowMatches.length, 15); i++) {
+    if (cellsOf(rowMatches[i][2]).some(c => /(^|\s)TIPO(\s|$)/.test(cellText(c).toUpperCase().trim()))) { headerIdx = i; break; }
+  }
+  const headerCells = cellsOf(rowMatches[headerIdx][2]);
   const headerMap = {};
   headerCells.forEach(c => { headerMap[c.col] = cellText(c).toUpperCase(); });
   const findCol = (...keywords) => {
@@ -3207,14 +3223,44 @@ async function parseEquipWorkbookComFotos(file) {
   const colOperador = findCol("OPERADOR", "MOTORISTA");
   const colFoto = findCol("FOTO");
 
+  // fotos "flutuantes" (formato clássico do Excel): drawing ancorado em linha/coluna da planilha
+  const colIndex = (letters) => letters.split("").reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
+  const drawingPhotos = {}; // linha (1-based) -> mediaPath, só da coluna de foto do equipamento
+  try {
+    const sheetRelsPath = sheetPath.replace(/([^/]+)$/, "_rels/$1.rels");
+    const sheetRels = zip.file(sheetRelsPath) ? await zip.file(sheetRelsPath).async("string") : "";
+    const drawingTarget = (sheetRels.match(/Target="([^"]*drawings\/[^"]+\.xml)"/) || [])[1];
+    if (drawingTarget && colFoto) {
+      const drawingPath = "xl/" + drawingTarget.replace(/^(\.\.\/)+/, "").replace(/^\//, "");
+      const drawingXml = await zip.file(drawingPath).async("string");
+      const drawingRelsPath = drawingPath.replace(/([^/]+)$/, "_rels/$1.rels");
+      const drawingRels = await zip.file(drawingRelsPath).async("string");
+      const relTargets = {};
+      [...drawingRels.matchAll(/<Relationship [^>]*>/g)].forEach(m => {
+        const id = (m[0].match(/Id="([^"]+)"/) || [])[1];
+        const target = (m[0].match(/Target="([^"]+)"/) || [])[1];
+        if (id && target) relTargets[id] = "xl/" + target.replace(/^(\.\.\/)+/, "").replace(/^\//, "");
+      });
+      const fotoCol = colIndex(colFoto);
+      [...drawingXml.matchAll(/<xdr:(?:twoCellAnchor|oneCellAnchor)[\s\S]*?<\/xdr:(?:twoCellAnchor|oneCellAnchor)>/g)].forEach(m => {
+        const a = m[0];
+        const col = parseInt((a.match(/<xdr:from><xdr:col>(\d+)</) || [])[1], 10);
+        const row = parseInt((a.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)</) || [])[1], 10);
+        const rid = (a.match(/r:embed="([^"]+)"/) || [])[1];
+        if (col === fotoCol && !isNaN(row) && rid && relTargets[rid] && !drawingPhotos[row + 1]) drawingPhotos[row + 1] = relTargets[rid];
+      });
+    }
+  } catch (e) { console.warn("Não consegui ler as fotos flutuantes:", e); }
+
   const records = [];
-  for (let i = 1; i < rowMatches.length; i++) {
+  for (let i = headerIdx + 1; i < rowMatches.length; i++) {
     const cells = cellsOf(rowMatches[i][2]);
     const byCol = {};
     cells.forEach(c => { byCol[c.col] = c; });
     const tipo = cellText(byCol[colTipo]).trim();
     if (!tipo) continue;
     const vmFoto = colFoto ? cellVm(byCol[colFoto]) : null;
+    const rowNum = parseInt(rowMatches[i][1], 10);
     records.push({
       tipo,
       marca: cellText(byCol[colMarca]).trim(),
@@ -3222,8 +3268,8 @@ async function parseEquipWorkbookComFotos(file) {
       placa: cellText(byCol[colPlaca]).trim(),
       proprietario: cellText(byCol[colFornecedor]).trim(),
       operador: cellText(byCol[colOperador]).trim(),
-      situacao: cellText(byCol[colSituacao]).trim() || "ATIVO",
-      mediaPath: (vmFoto && vmToMedia[vmFoto]) || null
+      situacao: normalizeEquipSituacao(cellText(byCol[colSituacao])),
+      mediaPath: (vmFoto && vmToMedia[vmFoto]) || drawingPhotos[rowNum] || null
     });
   }
   return { records, zip };
@@ -3334,7 +3380,7 @@ document.getElementById("btn-confirmar-import-fotos").addEventListener("click", 
       const id = novoEquipId();
       await EquipStore.saveItem({
         id, obra, tipo: rec.tipo, marca: rec.marca, modelo: rec.modelo, placa: rec.placa,
-        proprietario: rec.proprietario, operador: rec.operador, situacao: rec.situacao || "ATIVO",
+        proprietario: rec.proprietario, operador: rec.operador, situacao: normalizeEquipSituacao(rec.situacao),
         locacao: "", tag: "", renavam: "", chassis: "", ano: "", sieng: "", frente: "", obs: "",
         temFoto: !!rec.mediaPath
       });
@@ -3487,7 +3533,7 @@ function parseEquipSheetRows(rows) {
       obra, tipo: tipoVal, operador: get("operador"), marca: get("marca"), modelo: get("modelo"),
       proprietario: get("proprietario"), locacao: get("locacao"), valor: get("valor"),
       tag: get("tag"), renavam: get("renavam"), chassis: get("chassis"), ano: get("ano"),
-      placa: get("placa"), situacao: get("situacao") || "ATIVO", sieng: get("sieng"),
+      placa: get("placa"), situacao: normalizeEquipSituacao(get("situacao")), sieng: get("sieng"),
       frente: get("frente"), obs: get("obs"),
       horimetroAtual: get("horimetroAtual"), horimetroManutencao: get("horimetroManutencao"),
       motivoManutencao: get("motivoManutencao"), previsaoDevolucao: get("previsaoDevolucao")
